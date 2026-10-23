@@ -12,11 +12,19 @@ describe('zoneLookupService', () => {
   });
 
   test('accurately identifies Zone 318A in Al Karama commercial area', () => {
-    // Al Karama commercial center
-    const userLocation: LatLng = { latitude: 25.2470, longitude: 55.3020 };
+    // Al Karama commercial center (Zone 318A)
+    const userLocation: LatLng = { latitude: 25.2500, longitude: 55.3020 };
     const matchedZone = findZoneByCoordinate(userLocation);
     expect(matchedZone).toBeDefined();
     expect(matchedZone?.zoneCode).toBe('318A');
+  });
+
+  test('accurately identifies Zone 626M in Nadd Hessa (from Parkin app)', () => {
+    const userLocation: LatLng = { latitude: 25.1380, longitude: 55.3800 };
+    const matchedZone = findZoneByCoordinate(userLocation);
+    expect(matchedZone).toBeDefined();
+    expect(matchedZone?.zoneCode).toBe('626M');
+    expect(matchedZone?.areaNameEn).toBe('Nadd Hessa');
   });
 
   test('returns null when parked in the desert / non-parking area', () => {

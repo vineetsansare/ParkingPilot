@@ -88,7 +88,7 @@ export const ZoneDetailCard: React.FC<Props> = ({
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 1. COLLAPSED MINI DOCK (Sits neatly just above bottom tab bar)
+  // 1. COLLAPSED MINI DOCK (Sits just above bottom tab bar)
   // ─────────────────────────────────────────────────────────────
   if (!isExpanded) {
     return (
@@ -106,30 +106,34 @@ export const ZoneDetailCard: React.FC<Props> = ({
               {zone.areaNameEn}
             </Text>
             <Text style={styles.miniTariffText}>
-              {tariff.isFree ? 'FREE PARKING' : `AED ${tariff.hourlyRateAED.toFixed(2)} / hr`} •{' '}
-              {zone.emirateId}
+              {tariff.isFree
+                ? 'FREE PARKING'
+                : `AED ${tariff.hourlyRateAED.toFixed(2)} / hr`} •{' '}
+              {zone.emirateId === 'DXB' ? 'On-street' : zone.emirateId}
             </Text>
           </View>
         </View>
 
         <View style={styles.miniDockRight}>
-          {/* Quick 1-Tap WhatsApp Pay Button */}
-          {zone.emirateId === 'DXB' && (
-            <TouchableOpacity
-              style={styles.miniWhatsAppButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                handlePay('whatsapp');
-              }}
-            >
-              <Ionicons name="logo-whatsapp" size={16} color="#FFFFFF" />
-              <Text style={styles.miniWhatsAppText}>Pay</Text>
-            </TouchableOpacity>
-          )}
+          {/* Quick Pay CTA */}
+          <TouchableOpacity
+            style={styles.miniWhatsAppButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handlePay(zone.emirateId === 'DXB' ? 'whatsapp' : 'sms');
+            }}
+          >
+            <Ionicons
+              name={zone.emirateId === 'DXB' ? 'logo-whatsapp' : 'paper-plane'}
+              size={15}
+              color="#FFFFFF"
+            />
+            <Text style={styles.miniWhatsAppText}>Pay</Text>
+          </TouchableOpacity>
 
           {/* Quick Expand Chevron */}
           <TouchableOpacity style={styles.expandButton} onPress={onToggleExpand}>
-            <Ionicons name="chevron-up" size={20} color="#2563EB" />
+            <Ionicons name="chevron-up" size={18} color="#0D9488" />
           </TouchableOpacity>
 
           {/* Dismiss button */}
@@ -142,7 +146,7 @@ export const ZoneDetailCard: React.FC<Props> = ({
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 2. EXPANDED FULL MODAL DRAWER
+  // 2. EXPANDED FULL MODAL DRAWER (Parkin App Production Style)
   // ─────────────────────────────────────────────────────────────
   return (
     <View style={styles.expandedContainer}>
@@ -151,13 +155,13 @@ export const ZoneDetailCard: React.FC<Props> = ({
         <View style={styles.dragHandle} />
       </TouchableOpacity>
 
-      {/* Header */}
+      {/* Header with Zone Badge, Name, and Close */}
       <View style={styles.header}>
         <View style={styles.titleContainer}>
-          <View style={styles.zoneBadge}>
-            <Text style={styles.zoneBadgeText}>ZONE {zone.zoneCode}</Text>
+          <View style={styles.parkinZoneBadge}>
+            <Text style={styles.parkinZoneBadgeText}>{zone.zoneCode}</Text>
           </View>
-          <View>
+          <View style={{ marginLeft: 12 }}>
             <Text style={styles.areaName}>{zone.areaNameEn}</Text>
             <Text style={styles.emirateLabel}>
               {zone.emirateId === 'DXB' ? 'Dubai (RTA / Parkin)' : zone.emirateId}
@@ -175,28 +179,23 @@ export const ZoneDetailCard: React.FC<Props> = ({
         </View>
       </View>
 
-      {/* Status banner */}
-      <View
-        style={[
-          styles.statusBanner,
-          { backgroundColor: status.isPaid ? '#EFF6FF' : '#F0FDF4' },
-        ]}
-      >
-        <Ionicons
-          name={status.isPaid ? 'time-outline' : 'checkmark-circle-outline'}
-          size={18}
-          color={status.isPaid ? '#2563EB' : '#16A34A'}
-        />
-        <View style={{ marginLeft: 8, flex: 1 }}>
-          <Text
-            style={[
-              styles.statusText,
-              { color: status.isPaid ? '#1E40AF' : '#15803D' },
-            ]}
-          >
-            {status.statusText}
+      {/* Status & Rate summary (Parkin style) */}
+      <View style={styles.infoMetaRow}>
+        <View style={styles.infoMetaItem}>
+          <Ionicons name="location-sharp" size={16} color="#0D9488" />
+          <Text style={styles.infoMetaText}>
+            On street • {tariff.isPeak ? 'Peak' : 'Off-peak'}{' '}
+            <Text style={{ fontWeight: '800' }}>
+              AED {tariff.hourlyRateAED.toFixed(2)}/hr
+            </Text>
           </Text>
-          <Text style={styles.statusSubtext}>{status.detailText}</Text>
+        </View>
+
+        <View style={styles.infoMetaItem}>
+          <Ionicons name="time-outline" size={16} color="#64748B" />
+          <Text style={styles.infoMetaText}>
+            {status.isPaid ? '08:00 – 22:00 (Paid)' : 'Free Right Now'}
+          </Text>
         </View>
       </View>
 
@@ -224,10 +223,47 @@ export const ZoneDetailCard: React.FC<Props> = ({
         ))}
       </View>
 
+      {/* Peak and Off-peak Hours Visual Timeline (Parkin App Pattern) */}
+      <View style={styles.timelineCard}>
+        <Text style={styles.timelineTitle}>Peak and Off-peak hours</Text>
+        <View style={styles.timelineBar}>
+          {/* 12am - 8am: Off-peak / Free (Cyan) */}
+          <View style={[styles.timelineSegment, { flex: 8, backgroundColor: '#99F6E4' }]} />
+          {/* 8am - 10am: Peak (Peach/Coral) */}
+          <View style={[styles.timelineSegment, { flex: 2, backgroundColor: '#FCA5A5' }]} />
+          {/* 10am - 4pm: Off-peak (Cyan) */}
+          <View style={[styles.timelineSegment, { flex: 6, backgroundColor: '#99F6E4' }]} />
+          {/* 4pm - 8pm: Peak (Peach/Coral) */}
+          <View style={[styles.timelineSegment, { flex: 4, backgroundColor: '#FCA5A5' }]} />
+          {/* 8pm - 12am: Off-peak (Cyan) */}
+          <View style={[styles.timelineSegment, { flex: 4, backgroundColor: '#99F6E4' }]} />
+        </View>
+
+        <View style={styles.timelineLabels}>
+          <Text style={styles.timelineTimeText}>12 am</Text>
+          <Text style={styles.timelineTimeText}>8 am</Text>
+          <Text style={styles.timelineTimeText}>10 am</Text>
+          <Text style={styles.timelineTimeText}>4 pm</Text>
+          <Text style={styles.timelineTimeText}>8 pm</Text>
+          <Text style={styles.timelineTimeText}>11:59 pm</Text>
+        </View>
+
+        <View style={styles.timelineLegend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#2DD4BF' }]} />
+            <Text style={styles.legendText}>Off-peak hours</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#F87171' }]} />
+            <Text style={styles.legendText}>Peak hours</Text>
+          </View>
+        </View>
+      </View>
+
       {/* Tariff summary */}
       <View style={styles.tariffCard}>
         <View style={styles.tariffRow}>
-          <Text style={styles.tariffLabel}>Total Tariff</Text>
+          <Text style={styles.tariffLabel}>Total Ticket Price</Text>
           <Text style={styles.tariffValue}>
             {tariff.isFree ? 'FREE' : `AED ${tariff.totalCostAED.toFixed(2)}`}
           </Text>
@@ -264,8 +300,8 @@ export const ZoneDetailCard: React.FC<Props> = ({
           onPress={() => handlePay('sms')}
           disabled={isSending}
         >
-          <Ionicons name="chatbox-ellipses-outline" size={20} color="#1E293B" />
-          <Text style={[styles.payButtonText, { color: '#1E293B', marginLeft: 8 }]}>
+          <Ionicons name="chatbox-ellipses-outline" size={20} color="#0F172A" />
+          <Text style={[styles.payButtonText, { color: '#0F172A', marginLeft: 8 }]}>
             Pay via SMS ({zone.emirateId === 'DXB' ? '7275' : 'Send SMS'})
           </Text>
         </TouchableOpacity>
@@ -319,13 +355,13 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   miniZoneBadge: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#00C49F', // Parkin signature cyan-green
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   miniZoneText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '900',
     fontSize: 13,
   },
@@ -345,7 +381,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   miniWhatsAppButton: {
-    backgroundColor: '#25D366',
+    backgroundColor: '#00C49F',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -354,12 +390,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   miniWhatsAppText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: '#0F172A',
+    fontWeight: '800',
     fontSize: 13,
   },
   expandButton: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F0FDFA',
     padding: 6,
     borderRadius: 8,
   },
@@ -395,27 +431,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  zoneBadge: {
-    backgroundColor: '#2563EB',
+  parkinZoneBadge: {
+    backgroundColor: '#00C49F', // Parkin cyan
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    marginRight: 10,
   },
-  zoneBadgeText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
+  parkinZoneBadgeText: {
+    color: '#0F172A',
+    fontWeight: '900',
     fontSize: 16,
   },
   areaName: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: '#0F172A',
   },
   emirateLabel: {
@@ -427,24 +462,28 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#F1F5F9',
   },
-  statusBanner: {
+  infoMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 12,
+  },
+  infoMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 16,
+    gap: 4,
   },
-  statusText: {
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  statusSubtext: {
-    fontSize: 11,
-    color: '#64748B',
+  infoMetaText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#475569',
     marginBottom: 8,
     textTransform: 'uppercase',
@@ -453,7 +492,7 @@ const styles = StyleSheet.create({
   durationRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   durationChip: {
     flex: 1,
@@ -465,8 +504,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   durationChipActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
+    backgroundColor: '#F0FDFA',
+    borderColor: '#0D9488',
   },
   durationChipText: {
     fontSize: 14,
@@ -474,14 +513,72 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
   durationChipTextActive: {
-    color: '#2563EB',
-    fontWeight: '700',
+    color: '#0D9488',
+    fontWeight: '800',
   },
+
+  // ─── Timeline Bar ───
+  timelineCard: {
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  timelineTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  timelineBar: {
+    flexDirection: 'row',
+    height: 14,
+    borderRadius: 7,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  timelineSegment: {
+    height: '100%',
+  },
+  timelineLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  timelineTimeText: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  timelineLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 2,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+
   tariffCard: {
     backgroundColor: '#F8FAFC',
     padding: 12,
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -496,7 +593,7 @@ const styles = StyleSheet.create({
   },
   tariffValue: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#0F172A',
   },
   fineProtectionRow: {
@@ -517,9 +614,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 14,
   },
   whatsappButton: {
     backgroundColor: '#25D366',
@@ -540,8 +637,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   nearbyContainer: {
-    marginTop: 14,
-    paddingTop: 10,
+    marginTop: 12,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
   },

@@ -5,7 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  Platform,
+  ScrollView,
 } from 'react-native';
 import MapView, { Polygon, Marker, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +36,6 @@ export default function MapScreen() {
   const setCurrentLocation = useParkingStore((state) => state.setCurrentLocation);
   const selectedZone = useParkingStore((state) => state.selectedZone);
   const setSelectedZone = useParkingStore((state) => state.setSelectedZone);
-  const detectedZone = useParkingStore((state) => state.detectedZone);
 
   const [isCardExpanded, setIsCardExpanded] = useState<boolean>(false);
   const [mapCenter, setMapCenter] = useState<LatLng>({
@@ -55,7 +54,6 @@ export default function MapScreen() {
         };
         setCurrentLocation(point);
 
-        // Check if inside zone
         const matched = findZoneByCoordinate(point);
         if (matched) {
           setSelectedZone(matched);
@@ -63,8 +61,8 @@ export default function MapScreen() {
 
         mapRef.current?.animateToRegion({
           ...point,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
+          latitudeDelta: 0.018,
+          longitudeDelta: 0.018,
         });
       }
     };
@@ -110,6 +108,18 @@ export default function MapScreen() {
     }
   };
 
+  // Centroid coordinate for placing the Parkin-style floating marker
+  const selectedZoneCenter = selectedZone && selectedZone.polygonCoords.length > 0
+    ? {
+        latitude:
+          selectedZone.polygonCoords.reduce((sum, p) => sum + p.latitude, 0) /
+          selectedZone.polygonCoords.length,
+        longitude:
+          selectedZone.polygonCoords.reduce((sum, p) => sum + p.longitude, 0) /
+          selectedZone.polygonCoords.length,
+      }
+    : null;
+
   return (
     <View style={styles.container}>
       {/* Full screen Map */}
@@ -121,7 +131,7 @@ export default function MapScreen() {
         showsUserLocation={false}
         showsCompass={false}
       >
-        {/* Render all parking zones as highlighted polygons */}
+        {/* Render all parking zones as highlighted polygons with crisp borders */}
         {zones.map((zone) => {
           const isSelected = selectedZone?.id === zone.id;
           return (
@@ -130,16 +140,51 @@ export default function MapScreen() {
               coordinates={zone.polygonCoords}
               fillColor={
                 isSelected
-                  ? 'rgba(37, 99, 235, 0.5)' // highlighted selection
-                  : zone.fillColor || 'rgba(76, 175, 80, 0.35)'
+                  ? 'rgba(168, 85, 247, 0.32)' // Parkin signature purple highlight
+                  : zone.fillColor || 'rgba(13, 148, 136, 0.22)'
               }
-              strokeColor={isSelected ? '#1D4ED8' : zone.strokeColor || '#2E7D32'}
-              strokeWidth={isSelected ? 3 : 1.5}
+              strokeColor={isSelected ? '#7E22CE' : zone.strokeColor || '#0F766E'}
+              strokeWidth={isSelected ? 2.5 : 1.5}
               tappable
               onPress={() => handleFocusZone(zone)}
             />
           );
         })}
+
+        {/* Parkin-Style Floating Tooltip & Zone Pin on Selected Zone */}
+        {selectedZone && selectedZoneCenter && (
+          <Marker
+            coordinate={selectedZoneCenter}
+            anchor={{ x: 0.5, y: 1.0 }}
+            pointerEvents="none"
+          >
+            <View style={styles.parkinMarkerWrapper}>
+              {/* Floating Tooltip Pill */}
+              <View style={styles.parkinTooltipPill}>
+                <Ionicons name="car" size={13} color="#FFFFFF" />
+                <Text style={styles.parkinTooltipText}>Parking zone</Text>
+                <View style={styles.parkinTooltipBadge}>
+                  <Text style={styles.parkinTooltipBadgeText}>
+                    {selectedZone.zoneCode}
+                  </Text>
+                </View>
+                <Text style={styles.parkinTooltipText}>detected</Text>
+              </View>
+
+              {/* Price Pill */}
+              <View style={styles.parkinPricePill}>
+                <Text style={styles.parkinPriceText}>
+                  AED {selectedZone.tariffOffpeakHourly.toFixed(2)}/hr
+                </Text>
+              </View>
+
+              {/* Circular Parking Icon */}
+              <View style={styles.parkinPinIcon}>
+                <Text style={styles.parkinPinP}>P</Text>
+              </View>
+            </View>
+          </Marker>
+        )}
 
         {/* User Location Pin */}
         {currentLocation && (
@@ -151,104 +196,70 @@ export default function MapScreen() {
             <View style={styles.userPinContainer}>
               <View style={styles.userPinPulse} />
               <View style={styles.userPinCore}>
-                <Ionicons name="car" size={16} color="#FFFFFF" />
+                <Ionicons name="navigate" size={14} color="#FFFFFF" />
               </View>
             </View>
           </Marker>
         )}
       </MapView>
 
-      {/* Top Floating Controls */}
-      <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
-        {/* Active Session Warning / Countdown */}
+      {/* Top Floating Area: Active Banner + Horizontally Scrollable Zone Pills */}
+      <View style={[styles.topOverlay, { paddingTop: insets.top + 6 }]}>
+        {/* Active Session Warning / Countdown if any */}
         <ActiveSessionBanner />
 
-        {/* Header Bar */}
-        <View style={styles.topBar}>
-          <View style={styles.appNameContainer}>
-            <Text style={styles.appTitle}>🅿️ Parking Ticket Buddy</Text>
-            <Text style={styles.appSubtitle}>
-              {selectedZone
-                ? `Exploring Zone ${selectedZone.zoneCode}`
-                : 'Pan map to explore zones'}
-            </Text>
-          </View>
-
-          <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
-            <Ionicons name="locate" size={22} color="#2563EB" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick Zone Shortcuts */}
-        <View style={styles.shortcutsRow}>
-          <TouchableOpacity
-            style={[
-              styles.shortcutChip,
-              selectedZone?.zoneCode === '318C' && styles.shortcutChipActive,
-            ]}
-            onPress={() => {
-              const karama = zones.find((z) => z.zoneCode === '318C');
-              if (karama) handleFocusZone(karama);
-            }}
+        {/* Horizontally Scrollable Pills Describing Parking Areas Nearby */}
+        <View style={styles.shortcutsScrollWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.shortcutsRow}
           >
-            <Text
-              style={[
-                styles.shortcutText,
-                selectedZone?.zoneCode === '318C' && styles.shortcutTextActive,
-              ]}
-            >
-              📍 Al Karama (318C)
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.shortcutChip,
-              selectedZone?.zoneCode === '318A' && styles.shortcutChipActive,
-            ]}
-            onPress={() => {
-              const commercial = zones.find((z) => z.zoneCode === '318A');
-              if (commercial) handleFocusZone(commercial);
-            }}
-          >
-            <Text
-              style={[
-                styles.shortcutText,
-                selectedZone?.zoneCode === '318A' && styles.shortcutTextActive,
-              ]}
-            >
-              🏢 Karama Mkt (318A)
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.shortcutChip,
-              selectedZone?.zoneCode === '346A' && styles.shortcutChipActive,
-            ]}
-            onPress={() => {
-              const bbay = zones.find((z) => z.zoneCode === '346A');
-              if (bbay) handleFocusZone(bbay);
-            }}
-          >
-            <Text
-              style={[
-                styles.shortcutText,
-                selectedZone?.zoneCode === '346A' && styles.shortcutTextActive,
-              ]}
-            >
-              🌆 Business Bay
-            </Text>
-          </TouchableOpacity>
+            {zones.map((zone) => {
+              const isSelected = selectedZone?.id === zone.id;
+              return (
+                <TouchableOpacity
+                  key={zone.id}
+                  style={[
+                    styles.shortcutChip,
+                    isSelected && styles.shortcutChipActive,
+                  ]}
+                  onPress={() => handleFocusZone(zone)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.shortcutText,
+                      isSelected && styles.shortcutTextActive,
+                    ]}
+                  >
+                    📍 {zone.areaNameEn} ({zone.zoneCode})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       </View>
+
+      {/* Floating Current Location Button on BOTTOM-LEFT Corner */}
+      <TouchableOpacity
+        style={[
+          styles.bottomLeftLocationButton,
+          { bottom: isCardExpanded ? 24 : 76 },
+        ]}
+        onPress={handleRecenter}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="locate" size={22} color="#0F172A" />
+      </TouchableOpacity>
 
       {/* Center Target Indicator (Crosshairs when panning) */}
       <View style={styles.centerTarget} pointerEvents="none">
         <View style={styles.targetDot} />
       </View>
 
-      {/* Bottom Zone Details Card (Mini-Dock or Expanded Drawer) */}
+      {/* Bottom Zone Details Card (Sits just above the bottom tab bar) */}
       {selectedZone && (
         <View
           style={[
@@ -287,82 +298,147 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 10,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    padding: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  appNameContainer: {
-    flex: 1,
-  },
-  appTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  appSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  recenterButton: {
-    padding: 10,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
+  shortcutsScrollWrapper: {
+    marginTop: 4,
   },
   shortcutsRow: {
-    flexDirection: 'row',
     paddingHorizontal: 16,
-    marginTop: 8,
     gap: 8,
+    alignItems: 'center',
   },
   shortcutChip: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   shortcutChipActive: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   shortcutText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#334155',
   },
   shortcutTextActive: {
     color: '#FFFFFF',
   },
+
+  // ─── Bottom-Left Location Button ───
+  bottomLeftLocationButton: {
+    position: 'absolute',
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 6,
+    zIndex: 15,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+
+  // ─── Parkin-Style Floating Marker ───
+  parkinMarkerWrapper: {
+    alignItems: 'center',
+  },
+  parkinTooltipPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    gap: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    marginBottom: 4,
+  },
+  parkinTooltipText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  parkinTooltipBadge: {
+    backgroundColor: '#00C49F',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  parkinTooltipBadgeText: {
+    color: '#0F172A',
+    fontWeight: '900',
+    fontSize: 10,
+  },
+  parkinPricePill: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    marginBottom: 4,
+  },
+  parkinPriceText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  parkinPinIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2.5,
+    borderColor: '#0D9488',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  parkinPinP: {
+    color: '#0D9488',
+    fontWeight: '900',
+    fontSize: 16,
+  },
+
+  // ─── User Pin ───
   userPinContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   userPinPulse: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(37, 99, 235, 0.25)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(14, 165, 233, 0.25)',
   },
   userPinCore: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2563EB',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#0284C7',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -383,7 +459,7 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#2563EB',
+    borderColor: '#0D9488',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -391,7 +467,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#0D9488',
   },
   bottomCardWrapper: {
     position: 'absolute',
