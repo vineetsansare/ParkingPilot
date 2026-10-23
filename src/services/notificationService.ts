@@ -5,7 +5,6 @@ import { ParkingZone } from '../types/parking';
 // Configure notification presentation behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,

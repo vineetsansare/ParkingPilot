@@ -7,7 +7,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { ParkingZone, Vehicle } from '../types/parking';
+import { ParkingZone } from '../types/parking';
 import { calculateParkingTariff } from '../utils/tariffCalculator';
 import { getParkingStatusDescription } from '../utils/timeUtils';
 import { MessagingService } from '../services/messagingService';
@@ -18,10 +18,17 @@ import { findNearbyZones } from '../services/zoneLookupService';
 
 interface Props {
   zone: ParkingZone;
-  onClose?: () => void;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  onClose: () => void;
 }
 
-export const ZoneDetailCard: React.FC<Props> = ({ zone, onClose }) => {
+export const ZoneDetailCard: React.FC<Props> = ({
+  zone,
+  isExpanded,
+  onToggleExpand,
+  onClose,
+}) => {
   const [durationHours, setDurationHours] = useState<number>(1);
   const [isSending, setIsSending] = useState(false);
 
@@ -42,7 +49,7 @@ export const ZoneDetailCard: React.FC<Props> = ({ zone, onClose }) => {
     if (!defaultVehicle) {
       Alert.alert(
         'Vehicle Required',
-        'Please add your vehicle plate number in the Vehicles tab before submitting a parking ticket.'
+        'Please add your vehicle plate number in the My Car tab before submitting a parking ticket.'
       );
       return;
     }
@@ -57,7 +64,6 @@ export const ZoneDetailCard: React.FC<Props> = ({ zone, onClose }) => {
       }
 
       if (result.success) {
-        // Record active session
         const now = new Date();
         const expiresAt = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
 
@@ -81,8 +87,70 @@ export const ZoneDetailCard: React.FC<Props> = ({ zone, onClose }) => {
     }
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // 1. COLLAPSED MINI DOCK (Sits neatly just above bottom tab bar)
+  // ─────────────────────────────────────────────────────────────
+  if (!isExpanded) {
+    return (
+      <TouchableOpacity
+        style={styles.miniDockContainer}
+        onPress={onToggleExpand}
+        activeOpacity={0.92}
+      >
+        <View style={styles.miniDockLeft}>
+          <View style={styles.miniZoneBadge}>
+            <Text style={styles.miniZoneText}>{zone.zoneCode}</Text>
+          </View>
+          <View style={{ marginLeft: 10, flex: 1 }}>
+            <Text style={styles.miniAreaName} numberOfLines={1}>
+              {zone.areaNameEn}
+            </Text>
+            <Text style={styles.miniTariffText}>
+              {tariff.isFree ? 'FREE PARKING' : `AED ${tariff.hourlyRateAED.toFixed(2)} / hr`} •{' '}
+              {zone.emirateId}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.miniDockRight}>
+          {/* Quick 1-Tap WhatsApp Pay Button */}
+          {zone.emirateId === 'DXB' && (
+            <TouchableOpacity
+              style={styles.miniWhatsAppButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handlePay('whatsapp');
+              }}
+            >
+              <Ionicons name="logo-whatsapp" size={16} color="#FFFFFF" />
+              <Text style={styles.miniWhatsAppText}>Pay</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Quick Expand Chevron */}
+          <TouchableOpacity style={styles.expandButton} onPress={onToggleExpand}>
+            <Ionicons name="chevron-up" size={20} color="#2563EB" />
+          </TouchableOpacity>
+
+          {/* Dismiss button */}
+          <TouchableOpacity style={styles.miniCloseButton} onPress={onClose}>
+            <Ionicons name="close" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. EXPANDED FULL MODAL DRAWER
+  // ─────────────────────────────────────────────────────────────
   return (
-    <View style={styles.container}>
+    <View style={styles.expandedContainer}>
+      {/* Drag handle / collapse bar */}
+      <TouchableOpacity style={styles.dragHandleContainer} onPress={onToggleExpand}>
+        <View style={styles.dragHandle} />
+      </TouchableOpacity>
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleContainer}>
@@ -97,11 +165,14 @@ export const ZoneDetailCard: React.FC<Props> = ({ zone, onClose }) => {
           </View>
         </View>
 
-        {onClose && (
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={20} color="#64748B" />
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <TouchableOpacity onPress={onToggleExpand} style={styles.iconCircleButton}>
+            <Ionicons name="chevron-down" size={18} color="#475569" />
           </TouchableOpacity>
-        )}
+          <TouchableOpacity onPress={onClose} style={styles.iconCircleButton}>
+            <Ionicons name="close" size={18} color="#64748B" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Status banner */}
@@ -222,16 +293,103 @@ export const ZoneDetailCard: React.FC<Props> = ({ zone, onClose }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  // ─── Collapsed Mini Dock ───
+  miniDockContainer: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    marginHorizontal: 12,
+    marginBottom: 6,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
     elevation: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  miniDockLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  miniZoneBadge: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  miniZoneText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  miniAreaName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  miniTariffText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  miniDockRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  miniWhatsAppButton: {
+    backgroundColor: '#25D366',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  miniWhatsAppText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  expandButton: {
+    backgroundColor: '#EFF6FF',
+    padding: 6,
+    borderRadius: 8,
+  },
+  miniCloseButton: {
+    padding: 6,
+  },
+
+  // ─── Expanded Modal ───
+  expandedContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  dragHandleContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
   },
   header: {
     flexDirection: 'row',
@@ -264,7 +422,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
   },
-  closeButton: {
+  iconCircleButton: {
     padding: 6,
     borderRadius: 20,
     backgroundColor: '#F1F5F9',
@@ -364,7 +522,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   whatsappButton: {
-    backgroundColor: '#25D366', // WhatsApp green
+    backgroundColor: '#25D366',
   },
   smsButton: {
     backgroundColor: '#F1F5F9',

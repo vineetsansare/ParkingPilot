@@ -9,8 +9,12 @@ export default function RootLayout() {
   useEffect(() => {
     // Initialize notifications and background parking observer
     const setupServices = async () => {
-      await NotificationService.initialize();
-      await ParkingDetectionService.startBackgroundMonitoring();
+      try {
+        await NotificationService.initialize();
+        await ParkingDetectionService.startBackgroundMonitoring();
+      } catch (e) {
+        console.log('Background services setup handled safely:', e);
+      }
     };
 
     setupServices();

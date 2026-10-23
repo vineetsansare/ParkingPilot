@@ -20,7 +20,12 @@ export default function ParkingAlertModal() {
     <View style={styles.container}>
       <TouchableOpacity style={styles.backdrop} onPress={() => router.back()} />
       <View style={styles.modalContent}>
-        <ZoneDetailCard zone={activeZone} onClose={() => router.back()} />
+        <ZoneDetailCard
+          zone={activeZone}
+          isExpanded={true}
+          onToggleExpand={() => router.back()}
+          onClose={() => router.back()}
+        />
       </View>
     </View>
   );

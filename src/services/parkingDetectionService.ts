@@ -56,38 +56,53 @@ export class ParkingDetectionService {
    * Starts background location monitoring
    */
   static async startBackgroundMonitoring(): Promise<boolean> {
-    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
-    if (fgStatus !== 'granted') return false;
+    try {
+      const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') return false;
 
-    const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-    if (bgStatus !== 'granted') return false;
+      // Background permission is only available in standalone / development builds on iOS
+      try {
+        const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+        if (bgStatus !== 'granted') return false;
 
-    const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_PARKING_TASK);
-    if (!isTaskRegistered) {
-      await Location.startLocationUpdatesAsync(BACKGROUND_PARKING_TASK, {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 30000, // Check every 30s
-        distanceInterval: 50, // Or every 50 meters
-        deferredUpdatesInterval: 60000,
-        showsBackgroundLocationIndicator: true,
-        foregroundService: {
-          notificationTitle: 'Parking Ticket Buddy Active',
-          notificationBody: 'Monitoring parking zones to prevent fines',
-          notificationColor: '#2563EB',
-        },
-      });
+        const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_PARKING_TASK);
+        if (!isTaskRegistered) {
+          await Location.startLocationUpdatesAsync(BACKGROUND_PARKING_TASK, {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 30000,
+            distanceInterval: 50,
+            deferredUpdatesInterval: 60000,
+            showsBackgroundLocationIndicator: true,
+            foregroundService: {
+              notificationTitle: 'Parking Ticket Buddy Active',
+              notificationBody: 'Monitoring parking zones to prevent fines',
+              notificationColor: '#2563EB',
+            },
+          });
+        }
+        return true;
+      } catch (bgError) {
+        // Expo Go does not allow background location in its client sandbox; log safely
+        console.log('Background location monitoring will run in full build:', bgError);
+        return false;
+      }
+    } catch (e) {
+      console.log('Location permission request skipped or not granted:', e);
+      return false;
     }
-
-    return true;
   }
 
   /**
    * Stops background monitoring
    */
   static async stopBackgroundMonitoring(): Promise<void> {
-    const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_PARKING_TASK);
-    if (isTaskRegistered) {
-      await Location.stopLocationUpdatesAsync(BACKGROUND_PARKING_TASK);
+    try {
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_PARKING_TASK);
+      if (isTaskRegistered) {
+        await Location.stopLocationUpdatesAsync(BACKGROUND_PARKING_TASK);
+      }
+    } catch (e) {
+      console.log('Error stopping background monitoring:', e);
     }
   }
 
@@ -95,11 +110,16 @@ export class ParkingDetectionService {
    * One-shot current location check
    */
   static async getCurrentLocation() {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return null;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
 
-    return await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-    });
+      return await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+    } catch (e) {
+      console.log('Could not get current location:', e);
+      return null;
+    }
   }
 }

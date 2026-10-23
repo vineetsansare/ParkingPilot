@@ -38,6 +38,7 @@ export default function MapScreen() {
   const setSelectedZone = useParkingStore((state) => state.setSelectedZone);
   const detectedZone = useParkingStore((state) => state.detectedZone);
 
+  const [isCardExpanded, setIsCardExpanded] = useState<boolean>(false);
   const [mapCenter, setMapCenter] = useState<LatLng>({
     latitude: INITIAL_REGION.latitude,
     longitude: INITIAL_REGION.longitude,
@@ -247,12 +248,22 @@ export default function MapScreen() {
         <View style={styles.targetDot} />
       </View>
 
-      {/* Bottom Zone Details Card (When a zone is selected or detected) */}
+      {/* Bottom Zone Details Card (Mini-Dock or Expanded Drawer) */}
       {selectedZone && (
-        <View style={[styles.bottomCardWrapper, { paddingBottom: insets.bottom + 8 }]}>
+        <View
+          style={[
+            styles.bottomCardWrapper,
+            { paddingBottom: isCardExpanded ? insets.bottom : insets.bottom + 4 },
+          ]}
+        >
           <ZoneDetailCard
             zone={selectedZone}
-            onClose={() => setSelectedZone(null)}
+            isExpanded={isCardExpanded}
+            onToggleExpand={() => setIsCardExpanded((prev) => !prev)}
+            onClose={() => {
+              setSelectedZone(null);
+              setIsCardExpanded(false);
+            }}
           />
         </View>
       )}
