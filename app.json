@@ -5,11 +5,34 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "parkingticketbuddy",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "ae.parkingbuddy.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "remote-notification"
+        ],
+        "NSLocationWhenInUseUsageDescription": "Parking Ticket Buddy uses your location to identify active parking zones and calculate tariffs.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Parking Ticket Buddy detects when your car stops in a paid parking zone to alert you before parking fines are issued.",
+        "NSLocationAlwaysUsageDescription": "Parking Ticket Buddy detects when your car stops in a paid parking zone to alert you before parking fines are issued.",
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "sms"
+        ]
+      }
     },
     "android": {
+      "package": "ae.parkingbuddy.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -20,6 +43,17 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Parking Ticket Buddy detects when your car stops in a paid parking zone to alert you before parking fines are issued."
+        }
+      ],
+      "expo-font"
+    ]
   }
 }
