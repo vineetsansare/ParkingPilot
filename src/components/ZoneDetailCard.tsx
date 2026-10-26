@@ -263,7 +263,10 @@ export const ZoneDetailCard: React.FC<Props> = ({
       {/* Tariff summary */}
       <View style={styles.tariffCard}>
         <View style={styles.tariffRow}>
-          <Text style={styles.tariffLabel}>Total Ticket Price</Text>
+          <View>
+            <Text style={styles.tariffLabel}>Total Ticket Price</Text>
+            <Text style={styles.vatSubtext}>Inclusive of 5% UAE VAT</Text>
+          </View>
           <Text style={styles.tariffValue}>
             {tariff.isFree ? 'FREE' : `AED ${tariff.totalCostAED.toFixed(2)}`}
           </Text>
@@ -272,7 +275,7 @@ export const ZoneDetailCard: React.FC<Props> = ({
         <View style={styles.fineProtectionRow}>
           <Ionicons name="shield-checkmark" size={14} color="#16A34A" />
           <Text style={styles.fineProtectionText}>
-            Protects against AED 150 non-payment fine
+            Protects against AED 150 non-payment fine (10m grace period)
           </Text>
         </View>
       </View>
@@ -305,6 +308,14 @@ export const ZoneDetailCard: React.FC<Props> = ({
             Pay via SMS ({zone.emirateId === 'DXB' ? '7275' : 'Send SMS'})
           </Text>
         </TouchableOpacity>
+      </View>
+
+      {/* UAE Regulatory & Independent Disclaimer */}
+      <View style={styles.legalComplianceNotice}>
+        <Ionicons name="information-circle-outline" size={13} color="#94A3B8" />
+        <Text style={styles.legalComplianceNoticeText}>
+          Independent utility tool. Payments are dispatched directly to official transport authorities (RTA 7275 / WhatsApp).
+        </Text>
       </View>
 
       {/* Nearby Zone Alternatives (helps with boundary mistakes) */}
@@ -591,6 +602,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#475569',
   },
+  vatSubtext: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 2,
+    fontWeight: '500',
+  },
   tariffValue: {
     fontSize: 20,
     fontWeight: '900',
@@ -635,6 +652,19 @@ const styles = StyleSheet.create({
     color: '#E0F2FE',
     fontSize: 11,
     fontWeight: '500',
+  },
+  legalComplianceNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  legalComplianceNoticeText: {
+    fontSize: 10,
+    color: '#94A3B8',
+    flex: 1,
+    lineHeight: 14,
   },
   nearbyContainer: {
     marginTop: 12,

@@ -38,4 +38,18 @@ describe('timeUtils', () => {
     const mondayEvening = new Date('2026-10-26T18:00:00');
     expect(isPaidParkingTime('AJM', mondayEvening)).toBe(true);
   });
+
+  test('UAE National Day (Dec 2) is recognized as free holiday', () => {
+    // 2026-12-02 is Wednesday (normal paid day, but free on National Day)
+    const nationalDay = new Date('2026-12-02T11:00:00');
+    expect(isFreeDay('DXB', nationalDay)).toBe(true);
+    expect(isPaidParkingTime('DXB', nationalDay)).toBe(false);
+  });
+
+  test('New Year Day (Jan 1) is recognized as free holiday', () => {
+    const newYearDay = new Date('2026-01-01T14:00:00');
+    expect(isFreeDay('DXB', newYearDay)).toBe(true);
+    expect(isPaidParkingTime('DXB', newYearDay)).toBe(false);
+  });
 });
+

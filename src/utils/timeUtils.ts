@@ -2,10 +2,62 @@ import { EmirateCode } from '../types/parking';
 import { UAE_EMIRATES } from '../constants/uaeParking';
 
 /**
+ * Official parking grace periods per Dubai Executive Council Resolution No. (5) of 2016
+ */
+export const UAE_PARKING_GRACE_PERIODS = {
+  ARRIVAL_MINUTES: 10, // 10-minute arrival grace period before needing to pay
+  EXPIRY_MINUTES: 10,  // 10-minute buffer after ticket expires before fine is issued
+};
+
+/**
+ * Official UAE Statutory Public Holidays where public parking is officially declared FREE
+ * by the Federal Authority for Government Human Resources (FAHR) and Dubai RTA / Parkin.
+ */
+export function isUAEHoliday(date: Date = new Date()): { isHoliday: boolean; holidayName?: string } {
+  const month = date.getMonth() + 1; // 1-12
+  const day = date.getDate();
+  const year = date.getFullYear();
+
+  // Fixed statutory holidays
+  if (month === 1 && day === 1) {
+    return { isHoliday: true, holidayName: "New Year's Day" };
+  }
+  if (month === 12 && (day === 2 || day === 3)) {
+    return { isHoliday: true, holidayName: "UAE National Day (Eid Al Etihad)" };
+  }
+
+  // 2026 Gazetted Islamic Holidays in UAE
+  if (year === 2026) {
+    // Eid Al Fitr (approx March 20 - 23, 2026)
+    if (month === 3 && day >= 20 && day <= 23) {
+      return { isHoliday: true, holidayName: "Eid Al Fitr Holiday" };
+    }
+    // Arafah Day & Eid Al Adha (approx May 26 - 29, 2026)
+    if (month === 5 && day >= 26 && day <= 29) {
+      return { isHoliday: true, holidayName: "Eid Al Adha Holiday" };
+    }
+    // Islamic New Year (approx June 16, 2026)
+    if (month === 6 && day === 16) {
+      return { isHoliday: true, holidayName: "Islamic New Year (Hijri 1448)" };
+    }
+    // Prophet's Birthday (approx August 25, 2026)
+    if (month === 8 && day === 25) {
+      return { isHoliday: true, holidayName: "Prophet's Birthday" };
+    }
+  }
+
+  return { isHoliday: false };
+}
+
+/**
  * Checks if a given date falls on the emirate's free day
- * (Sunday for Dubai/Abu Dhabi, Friday for Sharjah/Ajman)
+ * (Sunday for Dubai/Abu Dhabi, Friday for Sharjah/Ajman, or official UAE public holiday)
  */
 export function isFreeDay(emirateId: EmirateCode, date: Date = new Date()): boolean {
+  // Check if it is an official UAE public holiday
+  const holiday = isUAEHoliday(date);
+  if (holiday.isHoliday) return true;
+
   const config = UAE_EMIRATES[emirateId];
   if (!config || !config.freeDay) return false;
 
@@ -70,6 +122,15 @@ export function getParkingStatusDescription(emirateId: EmirateCode, date: Date =
       isPaid: false,
       statusText: 'Free Parking',
       detailText: `Public parking in ${config?.nameEn || 'this area'} is free of charge`,
+    };
+  }
+
+  const holiday = isUAEHoliday(date);
+  if (holiday.isHoliday) {
+    return {
+      isPaid: false,
+      statusText: 'Free Parking (Holiday)',
+      detailText: `Free public parking declared for ${holiday.holidayName}`,
     };
   }
 
