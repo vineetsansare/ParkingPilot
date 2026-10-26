@@ -20,7 +20,8 @@ describe('zoneLookupService', () => {
   });
 
   test('accurately identifies Zone 626M in Nadd Hessa (from Parkin app)', () => {
-    const userLocation: LatLng = { latitude: 25.1380, longitude: 55.3800 };
+    // Verified centroid of Nadd Hessa (Zone 626M) from Dubai Municipality GIS
+    const userLocation: LatLng = { latitude: 25.1285, longitude: 55.3890 };
     const matchedZone = findZoneByCoordinate(userLocation);
     expect(matchedZone).toBeDefined();
     expect(matchedZone?.zoneCode).toBe('626M');
