@@ -10,6 +10,7 @@ interface ParkingState {
   isMonitoring: boolean;
   activeSession: ParkingSession | null;
   pastSessions: ParkingSession[];
+  zonesRevision: number;
 
   setCurrentLocation: (location: LatLng) => void;
   setDetectedZone: (zone: ParkingZone | null, location?: LatLng) => void;
@@ -18,6 +19,7 @@ interface ParkingState {
   setIsMonitoring: (active: boolean) => void;
   startSession: (session: ParkingSession) => void;
   endSession: () => void;
+  incrementZonesRevision: () => void;
 }
 
 export const useParkingStore = create<ParkingState>((set) => ({
@@ -30,6 +32,7 @@ export const useParkingStore = create<ParkingState>((set) => ({
   isMonitoring: true,
   activeSession: null,
   pastSessions: [],
+  zonesRevision: 0,
 
   setCurrentLocation: (location) => set({ currentLocation: location }),
 
@@ -65,4 +68,7 @@ export const useParkingStore = create<ParkingState>((set) => ({
       }
       return { activeSession: null, detectionState: 'idle' };
     }),
+
+  incrementZonesRevision: () =>
+    set((state) => ({ zonesRevision: state.zonesRevision + 1 })),
 }));

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,10 @@ import { getAllZones, findZoneByCoordinate } from '../../services/zoneLookupServ
 import { ParkingDetectionService } from '../../services/parkingDetectionService';
 import { ZoneDetailCard } from '../../components/ZoneDetailCard';
 import { ActiveSessionBanner } from '../../components/ActiveSessionBanner';
+import { SearchZoneModal } from '../../components/SearchZoneModal';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { LatLng, ParkingZone } from '../../types/parking';
+import { calculatePolygonCentroid } from '../../utils/geoUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,18 +33,39 @@ const INITIAL_REGION: Region = {
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
+  const { theme, isDark, shadow3D, personaColor, driverPersona } = useAppTheme();
 
-  const zones = getAllZones();
+  const zonesRevision = useParkingStore((state) => state.zonesRevision);
+  const zones = useMemo(() => getAllZones(), [zonesRevision]);
   const currentLocation = useParkingStore((state) => state.currentLocation);
   const setCurrentLocation = useParkingStore((state) => state.setCurrentLocation);
   const selectedZone = useParkingStore((state) => state.selectedZone);
   const setSelectedZone = useParkingStore((state) => state.setSelectedZone);
 
   const [isCardExpanded, setIsCardExpanded] = useState<boolean>(false);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [mapCenter, setMapCenter] = useState<LatLng>({
     latitude: INITIAL_REGION.latitude,
     longitude: INITIAL_REGION.longitude,
   });
+  const [zoneAtReticle, setZoneAtReticle] = useState<ParkingZone | null>(null);
+
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync zone under given coordinate
+  const checkZoneAtCoordinate = (point: LatLng) => {
+    const matched = findZoneByCoordinate(point);
+    setZoneAtReticle(matched);
+    if (matched) {
+      if (matched.id !== selectedZone?.id) {
+        setSelectedZone(matched);
+      }
+    } else {
+      if (selectedZone) {
+        setSelectedZone(null);
+      }
+    }
+  };
 
   // Fetch actual GPS location on load
   useEffect(() => {
@@ -53,35 +77,45 @@ export default function MapScreen() {
           longitude: loc.coords.longitude,
         };
         setCurrentLocation(point);
-
-        const matched = findZoneByCoordinate(point);
-        if (matched) {
-          setSelectedZone(matched);
-        }
+        checkZoneAtCoordinate(point);
 
         mapRef.current?.animateToRegion({
           ...point,
           latitudeDelta: 0.018,
           longitudeDelta: 0.018,
         });
+      } else {
+        checkZoneAtCoordinate(mapCenter);
       }
     };
 
     fetchLocation();
   }, []);
 
-  // When user pans map and stops: detect which zone the center reticle is over
+  // When user pans map in real-time (debounced at 60ms for smooth 60fps tracking)
+  const handleRegionChange = (region: Region) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      checkZoneAtCoordinate({
+        latitude: region.latitude,
+        longitude: region.longitude,
+      });
+    }, 60);
+  };
+
+  // When user finishes pan / momentum comes to complete stop
   const handleRegionChangeComplete = (region: Region) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
     const centerPoint: LatLng = {
       latitude: region.latitude,
       longitude: region.longitude,
     };
     setMapCenter(centerPoint);
-
-    const zoneAtCenter = findZoneByCoordinate(centerPoint);
-    if (zoneAtCenter && zoneAtCenter.id !== selectedZone?.id) {
-      setSelectedZone(zoneAtCenter);
-    }
+    checkZoneAtCoordinate(centerPoint);
   };
 
   const handleRecenter = () => {
@@ -91,34 +125,49 @@ export default function MapScreen() {
         latitudeDelta: 0.015,
         longitudeDelta: 0.015,
       });
-      const matched = findZoneByCoordinate(currentLocation);
-      if (matched) setSelectedZone(matched);
+      checkZoneAtCoordinate(currentLocation);
     }
   };
 
   const handleFocusZone = (zone: ParkingZone) => {
     setSelectedZone(zone);
+    setZoneAtReticle(zone);
     if (zone.polygonCoords.length > 0) {
+      const centroidLat =
+        zone.polygonCoords.reduce((sum, p) => sum + p.latitude, 0) /
+        zone.polygonCoords.length;
+      const centroidLng =
+        zone.polygonCoords.reduce((sum, p) => sum + p.longitude, 0) /
+        zone.polygonCoords.length;
+
       mapRef.current?.animateToRegion({
-        latitude: zone.polygonCoords[0].latitude,
-        longitude: zone.polygonCoords[0].longitude,
+        latitude: centroidLat,
+        longitude: centroidLng,
         latitudeDelta: 0.012,
         longitudeDelta: 0.012,
       });
     }
   };
 
-  // Centroid coordinate for placing the Parkin-style floating marker
-  const selectedZoneCenter = selectedZone && selectedZone.polygonCoords.length > 0
-    ? {
-        latitude:
-          selectedZone.polygonCoords.reduce((sum, p) => sum + p.latitude, 0) /
-          selectedZone.polygonCoords.length,
-        longitude:
-          selectedZone.polygonCoords.reduce((sum, p) => sum + p.longitude, 0) /
-          selectedZone.polygonCoords.length,
-      }
-    : null;
+  const handleSelectZoneFromSearch = (zone: ParkingZone) => {
+    setIsSearchOpen(false);
+    setSelectedZone(zone);
+    setZoneAtReticle(zone);
+    setIsCardExpanded(false);
+
+    const centroid = calculatePolygonCentroid(zone.polygonCoords);
+    setMapCenter(centroid);
+
+    mapRef.current?.animateToRegion(
+      {
+        latitude: centroid.latitude,
+        longitude: centroid.longitude,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      },
+      600
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -127,6 +176,7 @@ export default function MapScreen() {
         ref={mapRef}
         style={styles.map}
         initialRegion={INITIAL_REGION}
+        onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
         showsUserLocation={false}
         showsCompass={false}
@@ -150,41 +200,6 @@ export default function MapScreen() {
             />
           );
         })}
-
-        {/* Parkin-Style Floating Tooltip & Zone Pin on Selected Zone */}
-        {selectedZone && selectedZoneCenter && (
-          <Marker
-            coordinate={selectedZoneCenter}
-            anchor={{ x: 0.5, y: 1.0 }}
-            pointerEvents="none"
-          >
-            <View style={styles.parkinMarkerWrapper}>
-              {/* Floating Tooltip Pill */}
-              <View style={styles.parkinTooltipPill}>
-                <Ionicons name="car" size={13} color="#FFFFFF" />
-                <Text style={styles.parkinTooltipText}>Parking zone</Text>
-                <View style={styles.parkinTooltipBadge}>
-                  <Text style={styles.parkinTooltipBadgeText}>
-                    {selectedZone.zoneCode}
-                  </Text>
-                </View>
-                <Text style={styles.parkinTooltipText}>detected</Text>
-              </View>
-
-              {/* Price Pill */}
-              <View style={styles.parkinPricePill}>
-                <Text style={styles.parkinPriceText}>
-                  AED {selectedZone.tariffOffpeakHourly.toFixed(2)}/hr
-                </Text>
-              </View>
-
-              {/* Circular Parking Icon */}
-              <View style={styles.parkinPinIcon}>
-                <Text style={styles.parkinPinP}>P</Text>
-              </View>
-            </View>
-          </Marker>
-        )}
 
         {/* User Location Pin */}
         {currentLocation && (
@@ -215,6 +230,24 @@ export default function MapScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.shortcutsRow}
           >
+            {/* 1-Tap Search Trigger Chip */}
+            <TouchableOpacity
+              style={[
+                styles.searchShortcutChip,
+                {
+                  backgroundColor: theme.surfacePrimary,
+                  borderColor: theme.mintPrimary,
+                },
+              ]}
+              onPress={() => setIsSearchOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="search" size={14} color={theme.mintPrimary} style={{ marginRight: 5 }} />
+              <Text style={[styles.searchShortcutText, { color: theme.mintPrimary }]}>
+                Search
+              </Text>
+            </TouchableOpacity>
+
             {zones.map((zone) => {
               const isSelected = selectedZone?.id === zone.id;
               return (
@@ -254,10 +287,70 @@ export default function MapScreen() {
         <Ionicons name="locate" size={22} color="#0F172A" />
       </TouchableOpacity>
 
-      {/* Center Target Indicator (Crosshairs when panning) */}
-      <View style={styles.centerTarget} pointerEvents="none">
-        <View style={styles.targetDot} />
+      {/* Floating Search Button on BOTTOM-RIGHT Corner */}
+      <TouchableOpacity
+        style={[
+          styles.bottomRightSearchButton,
+          shadow3D,
+          {
+            bottom: isCardExpanded ? 24 : 76,
+            backgroundColor: theme.surfacePrimary,
+            borderColor: driverPersona === 'pink' ? theme.pinkBorder : theme.mintBorder,
+          },
+        ]}
+        onPress={() => setIsSearchOpen(true)}
+        activeOpacity={0.85}
+      >
+        <Ionicons
+          name="search"
+          size={22}
+          color={driverPersona === 'pink' ? theme.pinkPrimary : theme.mintPrimary}
+        />
+      </TouchableOpacity>
+
+      {/* Center Reticle / Pin with Parkin-Style Floating Tooltip */}
+      <View style={styles.centerPinContainer} pointerEvents="none">
+        {/* Floating Tooltip Pill attached directly above the pin */}
+        {zoneAtReticle ? (
+          <View style={styles.centerFloatingTooltip}>
+            <View style={styles.parkinTooltipPill}>
+              <Ionicons name="car" size={13} color="#FFFFFF" />
+              <Text style={styles.parkinTooltipText}>Parking zone</Text>
+              <View style={styles.parkinTooltipBadge}>
+                <Text style={styles.parkinTooltipBadgeText}>
+                  {zoneAtReticle.zoneCode}
+                </Text>
+              </View>
+              <Text style={styles.parkinTooltipText}>detected</Text>
+            </View>
+
+            <View style={styles.parkinPricePill}>
+              <Text style={styles.parkinPriceText}>
+                AED {zoneAtReticle.tariffOffpeakHourly.toFixed(2)}/hr
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.centerFloatingTooltip}>
+            <View style={styles.unzonedTooltipPill}>
+              <Ionicons name="information-circle-outline" size={12} color="#64748B" />
+              <Text style={styles.unzonedTooltipText}>Non-Paid / Free Area</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Prominent Center Pin: 38px tall with needle pointing to exact map center */}
+        <View style={styles.pinWrapper}>
+          <View style={styles.pinHead}>
+            <View style={styles.pinIconP}>
+              <Text style={styles.pinLetter}>P</Text>
+            </View>
+          </View>
+          <View style={styles.pinStem} />
+          <View style={styles.pinDotAnchor} />
+        </View>
       </View>
+
 
       {/* Bottom Zone Details Card (Sits just above the bottom tab bar) */}
       {selectedZone && (
@@ -278,6 +371,14 @@ export default function MapScreen() {
           />
         </View>
       )}
+      {/* Search Zone Modal */}
+      <SearchZoneModal
+        visible={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        onSelectZone={handleSelectZoneFromSearch}
+        zones={zones}
+        currentLocation={currentLocation}
+      />
     </View>
   );
 }
@@ -350,6 +451,42 @@ const styles = StyleSheet.create({
     zIndex: 15,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+
+  // ─── Bottom-Right Search Button ───
+  bottomRightSearchButton: {
+    position: 'absolute',
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 6,
+    zIndex: 15,
+    borderWidth: 1.5,
+  },
+
+  searchShortcutChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    borderWidth: 1.5,
+  },
+  searchShortcutText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
 
   // ─── Parkin-Style Floating Marker ───
@@ -449,25 +586,85 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 4,
   },
-  centerTarget: {
+  centerPinContainer: {
     position: 'absolute',
     top: '50%',
     left: '50%',
-    marginLeft: -6,
-    marginTop: -6,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    transform: [{ translateX: -100 }, { translateY: -39 }],
+    width: 200,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    zIndex: 12,
+  },
+  centerFloatingTooltip: {
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 4,
+  },
+  unzonedTooltipPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  unzonedTooltipText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '700',
+  },
+  pinWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 39,
+  },
+  pinHead: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00C49F',
     borderWidth: 2,
-    borderColor: '#0D9488',
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  pinIconP: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  targetDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#0D9488',
+  pinLetter: {
+    color: '#0F172A',
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  pinStem: {
+    width: 3,
+    height: 7,
+    backgroundColor: '#00C49F',
+    borderBottomLeftRadius: 1.5,
+    borderBottomRightRadius: 1.5,
+  },
+  pinDotAnchor: {
+    width: 6,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#0F172A',
+    opacity: 0.4,
+    marginTop: 1,
   },
   bottomCardWrapper: {
     position: 'absolute',

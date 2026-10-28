@@ -9,33 +9,55 @@ interface CachedZone {
   center: LatLng;
 }
 
-const zoneCache: CachedZone[] = SEED_PARKING_ZONES.map((zone) => {
-  const bbox = calculateBoundingBox(zone.polygonCoords);
-  const center: LatLng = {
-    latitude: (bbox.minLat + bbox.maxLat) / 2,
-    longitude: (bbox.minLng + bbox.maxLng) / 2,
-  };
-  return { zone, bbox, center };
-});
+function buildCache(zones: ParkingZone[]): CachedZone[] {
+  return zones.map((zone) => {
+    const bbox = calculateBoundingBox(zone.polygonCoords);
+    const center: LatLng = {
+      latitude: (bbox.minLat + bbox.maxLat) / 2,
+      longitude: (bbox.minLng + bbox.maxLng) / 2,
+    };
+    return { zone, bbox, center };
+  });
+}
+
+let activeZoneList: ParkingZone[] = SEED_PARKING_ZONES;
+let zoneCache: CachedZone[] = buildCache(SEED_PARKING_ZONES);
 
 /**
- * Identifies which parking zone contains the given coordinate
+ * Dynamically reloads memory cache without restarting app
+ */
+export function updateZoneMemoryCache(newZones: ParkingZone[]): void {
+  activeZoneList = newZones;
+  zoneCache = buildCache(newZones);
+}
+
+/**
+ * Identifies which parking zone contains the given coordinate.
+ * Uses exact point-in-polygon ray casting with a 40m curb-proximity fallback
+ * for vehicles parked on curbs and service lanes along zone boundaries.
  */
 export function findZoneByCoordinate(point: LatLng, customZones?: ParkingZone[]): ParkingZone | null {
   const candidates = customZones
     ? customZones.map((zone) => ({
         zone,
         bbox: calculateBoundingBox(zone.polygonCoords),
+        center: {
+          latitude: point.latitude,
+          longitude: point.longitude,
+        },
       }))
     : zoneCache;
+
+  // Approx degrees for ~100m bounding box padding
+  const paddingDeg = 0.001;
 
   // Phase 1: Fast Bounding Box check (0.1ms)
   const potentialMatches = candidates.filter(
     ({ bbox }) =>
-      point.latitude >= bbox.minLat &&
-      point.latitude <= bbox.maxLat &&
-      point.longitude >= bbox.minLng &&
-      point.longitude <= bbox.maxLng
+      point.latitude >= bbox.minLat - paddingDeg &&
+      point.latitude <= bbox.maxLat + paddingDeg &&
+      point.longitude >= bbox.minLng - paddingDeg &&
+      point.longitude <= bbox.maxLng + paddingDeg
   );
 
   // Phase 2: Exact Ray-Casting Point-in-Polygon check (0.05ms)
@@ -45,7 +67,22 @@ export function findZoneByCoordinate(point: LatLng, customZones?: ParkingZone[])
     }
   }
 
-  return null;
+  // Phase 3: Street-side / Curb proximity fallback (within 40m of zone boundary)
+  // Ensures reliable detection when vehicle or crosshair is on roadside bays
+  let closestZone: ParkingZone | null = null;
+  let closestDistance = Infinity;
+
+  for (const match of potentialMatches) {
+    for (const vertex of match.zone.polygonCoords) {
+      const dist = getDistanceInMeters(point, vertex);
+      if (dist <= 40 && dist < closestDistance) {
+        closestDistance = dist;
+        closestZone = match.zone;
+      }
+    }
+  }
+
+  return closestZone;
 }
 
 /**
@@ -76,5 +113,6 @@ export function findNearbyZones(
  * Gets all available zones for rendering on the map
  */
 export function getAllZones(): ParkingZone[] {
-  return SEED_PARKING_ZONES;
+  return activeZoneList;
 }
+

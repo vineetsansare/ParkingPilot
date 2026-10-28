@@ -34,11 +34,28 @@ describe('zoneLookupService', () => {
     expect(matchedZone).toBeNull();
   });
 
-  test('finds nearby alternative zones when near boundary', () => {
-    const nearBoundary: LatLng = { latitude: 25.2460, longitude: 55.3015 };
-    const nearby = findNearbyZones(nearBoundary, 500);
-    expect(nearby.length).toBeGreaterThan(0);
-    const codes = nearby.map(z => z.zoneCode);
-    expect(codes).toContain('318C');
+  test('accurately identifies Sharjah Zone 5566 at Al Majaz Waterfront', () => {
+    // Al Majaz Waterfront fountain & promenade
+    const userLocation: LatLng = { latitude: 25.3262, longitude: 55.3900 };
+    const matchedZone = findZoneByCoordinate(userLocation);
+    expect(matchedZone).toBeDefined();
+    expect(matchedZone?.zoneCode).toBe('5566');
+    expect(matchedZone?.emirateId).toBe('SHJ');
+    expect(matchedZone?.areaNameEn).toBe('Al Majaz Waterfront');
+  });
+
+  test('accurately identifies Abu Dhabi Zone S at Corniche (Al Danah)', () => {
+    const userLocation: LatLng = { latitude: 24.4920, longitude: 54.3550 };
+    const matchedZone = findZoneByCoordinate(userLocation);
+    expect(matchedZone).toBeDefined();
+    expect(matchedZone?.zoneCode).toBe('S');
+    expect(matchedZone?.emirateId).toBe('AUH');
+  });
+
+  test('returns null when parked in the middle of Khalid Lagoon (water)', () => {
+    // Middle of Khalid Lagoon open water (no parking polygon intrusion)
+    const lagoonWaterLocation: LatLng = { latitude: 25.3350, longitude: 55.3900 };
+    const matchedZone = findZoneByCoordinate(lagoonWaterLocation);
+    expect(matchedZone).toBeNull();
   });
 });

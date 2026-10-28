@@ -19,9 +19,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useVehicleStore } from '../../store/vehicleStore';
 import { EmirateCode, Vehicle } from '../../types/parking';
 import { UAE_EMIRATES } from '../../constants/uaeParking';
+import { EMIRATE_PLATE_CONFIGS, EmiratePlateConfig, ALL_EMIRATES, validatePlateInput } from '../../constants/platePatterns';
+import { LicensePlateView } from '../../components/LicensePlateView';
+import { useAppTheme } from '../../theme/ThemeContext';
 
 export default function VehiclesScreen() {
   const insets = useSafeAreaInsets();
+  const { theme, isDark, shadow3D, personaColor, driverPersona } = useAppTheme();
+
   const vehicles = useVehicleStore((state) => state.vehicles);
   const defaultVehicle = useVehicleStore((state) => state.defaultVehicle);
   const addVehicle = useVehicleStore((state) => state.addVehicle);
@@ -34,19 +39,39 @@ export default function VehiclesScreen() {
   const [plateNumber, setPlateNumber] = useState('');
   const [displayName, setDisplayName] = useState('');
 
+  const currentConfig: EmiratePlateConfig = EMIRATE_PLATE_CONFIGS[emirateCode];
+
+  const handleSelectEmirate = (code: EmirateCode) => {
+    setEmirateCode(code);
+    setPlateCode(EMIRATE_PLATE_CONFIGS[code].defaultCode);
+  };
+
   const handleSave = () => {
-    if (!plateNumber.trim()) {
-      Alert.alert('Required', 'Please enter your license plate number.');
+    const trimmedNumber = plateNumber.trim();
+    const trimmedCode = plateCode.trim().toUpperCase();
+
+    if (!trimmedNumber) {
+      Alert.alert('Plate Number Required', 'Please enter your vehicle license plate number.');
+      return;
+    }
+
+    if (!/^\d{1,5}$/.test(trimmedNumber)) {
+      Alert.alert('Invalid Number', 'Plate number must be between 1 and 5 numeric digits.');
+      return;
+    }
+
+    if (!trimmedCode) {
+      Alert.alert('Code Required', `Please enter a valid ${currentConfig.codeLabel} for ${currentConfig.nameEn}.`);
       return;
     }
 
     addVehicle({
       emirateCode,
-      plateCode: plateCode.trim().toUpperCase(),
-      plateNumber: plateNumber.trim(),
+      plateCode: trimmedCode,
+      plateNumber: trimmedNumber,
       displayName:
         displayName.trim() ||
-        `${UAE_EMIRATES[emirateCode].nameEn} Plate ${plateCode}-${plateNumber}`,
+        `${currentConfig.nameEn} Plate ${trimmedCode}-${trimmedNumber}`,
       isDefault: vehicles.length === 0,
     });
 
@@ -58,39 +83,58 @@ export default function VehiclesScreen() {
 
   const renderVehicleItem = ({ item }: { item: Vehicle }) => {
     const isDefault = defaultVehicle?.id === item.id;
+    const config = EMIRATE_PLATE_CONFIGS[item.emirateCode] || EMIRATE_PLATE_CONFIGS.DXB;
+
     return (
-      <View style={styles.card}>
+      <View
+        style={[
+          styles.card,
+          shadow3D,
+          {
+            backgroundColor: theme.surfacePrimary,
+            borderColor: isDefault
+              ? (driverPersona === 'pink' ? theme.pinkBorder : theme.mintBorder)
+              : (isDark ? theme.borderDefault : 'rgba(255, 255, 255, 0.9)'),
+            borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#FFFFFF',
+          },
+        ]}
+      >
         <View style={styles.cardHeader}>
-          {/* Dubai-style License Plate Graphic */}
-          <View style={styles.plateContainer}>
-            <View style={styles.plateHeader}>
-              <Text style={styles.plateEmirateText}>
-                {UAE_EMIRATES[item.emirateCode].nameEn.toUpperCase()}
-              </Text>
-            </View>
-            <View style={styles.plateBody}>
-              <Text style={styles.plateCodeText}>{item.plateCode}</Text>
-              <Text style={styles.plateNumberText}>{item.plateNumber}</Text>
-            </View>
+          {/* Authentic Real-World License Plate Graphic */}
+          <View style={styles.plateWrapper}>
+            <LicensePlateView
+              emirateCode={item.emirateCode}
+              plateCode={item.plateCode}
+              plateNumber={item.plateNumber}
+              scale={0.92}
+            />
           </View>
 
+          {/* Vehicle Metadata & Actions */}
           <View style={styles.vehicleInfo}>
-            <Text style={styles.vehicleTitle}>{item.displayName}</Text>
-            <Text style={styles.vehicleSubtitle}>
-              {UAE_EMIRATES[item.emirateCode].nameEn} • Code {item.plateCode}
+            <Text style={[styles.vehicleTitle, { color: theme.textPrimary }]}>
+              {item.displayName}
+            </Text>
+            <Text style={[styles.vehicleSubtitle, { color: theme.textSecondary }]}>
+              {config.nameEn} ({config.nameAr}) • {config.codeLabel} {item.plateCode}
             </Text>
 
             {isDefault ? (
-              <View style={styles.defaultBadge}>
-                <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
-                <Text style={styles.defaultBadgeText}>Default Vehicle</Text>
+              <View style={[styles.defaultBadge, { backgroundColor: theme.mintPastel }]}>
+                <Ionicons name="checkmark-circle" size={14} color={theme.mintPrimary} />
+                <Text style={[styles.defaultBadgeText, { color: theme.mintPrimary }]}>
+                  Default Vehicle
+                </Text>
               </View>
             ) : (
               <TouchableOpacity
                 onPress={() => setDefaultVehicle(item.id)}
-                style={styles.makeDefaultButton}
+                style={[styles.makeDefaultButton, { borderColor: theme.borderDefault }]}
+                activeOpacity={0.7}
               >
-                <Text style={styles.makeDefaultText}>Set as Default</Text>
+                <Text style={[styles.makeDefaultText, { color: theme.textSecondary }]}>
+                  Set as Default
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -98,11 +142,11 @@ export default function VehiclesScreen() {
 
         {vehicles.length > 1 && (
           <TouchableOpacity
-            style={styles.deleteButton}
+            style={[styles.deleteButton, { backgroundColor: theme.surfaceSecondary }]}
             onPress={() => {
               Alert.alert(
                 'Delete Vehicle',
-                'Are you sure you want to delete this vehicle?',
+                `Are you sure you want to remove ${item.displayName}?`,
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
@@ -113,8 +157,9 @@ export default function VehiclesScreen() {
                 ]
               );
             }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+            <Ionicons name="trash-outline" size={17} color={theme.rosePrimary} />
           </TouchableOpacity>
         )}
       </View>
@@ -122,17 +167,21 @@ export default function VehiclesScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.container, { backgroundColor: theme.canvas, paddingTop: insets.top + 12 }]}>
       {/* Screen Header with unclipped + button */}
       <View style={styles.header}>
         <View style={styles.headerTextGroup}>
-          <Text style={styles.title}>My Vehicles</Text>
-          <Text style={styles.subtitle}>
-            Configure plates for auto-SMS & WhatsApp
+          <Text style={[styles.title, { color: theme.textPrimary }]}>My Vehicles</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Configure license plates for 1-tap SMS & WhatsApp parking
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.addButton}
+          style={[
+            styles.addButton,
+            shadow3D,
+            { backgroundColor: driverPersona === 'pink' ? theme.pinkPrimary : theme.mintPrimary },
+          ]}
           onPress={() => setModalVisible(true)}
           activeOpacity={0.8}
         >
@@ -144,11 +193,25 @@ export default function VehiclesScreen() {
         data={vehicles}
         keyExtractor={(item) => item.id}
         renderItem={renderVehicleItem}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 110, paddingTop: 4 }}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: theme.surfaceSecondary }]}>
+              <Ionicons name="car-outline" size={36} color={theme.textTertiary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
+              No Vehicles Added
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+              Tap the "+" button above to add your vehicle license plate.
+            </Text>
+          </View>
+        }
       />
 
-      {/* Add Vehicle Modal with KeyboardAvoidingView */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
+      {/* Add Vehicle Modal with Live Plate Preview */}
+      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
@@ -160,21 +223,24 @@ export default function VehiclesScreen() {
           <View
             style={[
               styles.modalContent,
-              { paddingBottom: Math.max(insets.bottom, 20) + 12 },
+              {
+                backgroundColor: theme.surfacePrimary,
+                paddingBottom: Math.max(insets.bottom, 20) + 16,
+              },
             ]}
           >
-            <View style={styles.dragHandle} />
+            <View style={[styles.dragHandle, { backgroundColor: theme.borderDefault }]} />
 
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New Vehicle</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Add New Vehicle</Text>
               <TouchableOpacity
                 onPress={() => {
                   Keyboard.dismiss();
                   setModalVisible(false);
                 }}
-                style={styles.modalCloseButton}
+                style={[styles.modalCloseButton, { backgroundColor: theme.surfaceSecondary }]}
               >
-                <Ionicons name="close" size={20} color="#64748B" />
+                <Ionicons name="close" size={18} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -182,71 +248,175 @@ export default function VehiclesScreen() {
               bounces={false}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 24 }}
             >
-              {/* Emirate Selector */}
-              <Text style={styles.inputLabel}>Emirate</Text>
-              <View style={styles.emirateRow}>
-                {(['DXB', 'AUH', 'SHJ', 'AJM'] as EmirateCode[]).map((em) => (
-                  <TouchableOpacity
-                    key={em}
-                    onPress={() => setEmirateCode(em)}
-                    style={[
-                      styles.emirateChip,
-                      emirateCode === em && styles.emirateChipActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.emirateChipText,
-                        emirateCode === em && styles.emirateChipTextActive,
-                      ]}
-                    >
-                      {UAE_EMIRATES[em].nameEn}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              {/* Live Interactive License Plate Preview */}
+              <View style={[styles.previewContainer, { backgroundColor: theme.surfaceSecondary }]}>
+                <Text style={[styles.previewLabel, { color: theme.textTertiary }]}>
+                  REAL-TIME PLATE PREVIEW
+                </Text>
+                <LicensePlateView
+                  emirateCode={emirateCode}
+                  plateCode={plateCode}
+                  plateNumber={plateNumber}
+                  scale={1.15}
+                />
               </View>
 
-              {/* Plate Code & Number */}
+              {/* 1. Emirate Selector (All 7 Emirates) */}
+              <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>
+                Emirate
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.emirateScrollRow}
+              >
+                {ALL_EMIRATES.map((em) => {
+                  const isSelected = emirateCode === em;
+                  const cfg = EMIRATE_PLATE_CONFIGS[em];
+                  return (
+                    <TouchableOpacity
+                      key={em}
+                      onPress={() => handleSelectEmirate(em)}
+                      style={[
+                        styles.emirateChip,
+                        {
+                          backgroundColor: isSelected ? theme.mintPrimary : theme.surfaceSecondary,
+                          borderColor: isSelected ? theme.mintPrimary : theme.borderDefault,
+                        },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.emirateChipText,
+                          {
+                            color: isSelected ? '#FFFFFF' : theme.textSecondary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {cfg.nameEn}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* 2. Plate Code (with pattern guidance & quick-select pills) */}
               <View style={styles.plateInputRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>Plate Code</Text>
+                  <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>
+                    {currentConfig.codeLabel}
+                  </Text>
                   <TextInput
-                    style={styles.input}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.surfaceSecondary,
+                        borderColor: theme.borderDefault,
+                        color: theme.textPrimary,
+                      },
+                    ]}
                     value={plateCode}
-                    onChangeText={setPlateCode}
-                    placeholder="A"
+                    onChangeText={(val) => setPlateCode(val.toUpperCase())}
+                    placeholder={currentConfig.codePlaceholder}
+                    placeholderTextColor={theme.textTertiary}
                     autoCapitalize="characters"
-                    maxLength={4}
+                    maxLength={currentConfig.codeType === 'number' ? 2 : 2}
+                    keyboardType={currentConfig.codeType === 'number' ? 'numeric' : 'default'}
                     returnKeyType="next"
                   />
                 </View>
 
-                <View style={{ flex: 2, marginLeft: 12 }}>
-                  <Text style={styles.inputLabel}>Plate Number</Text>
+                <View style={{ flex: 1.8, marginLeft: 12 }}>
+                  <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>
+                    Plate Number (1–5 Digits)
+                  </Text>
                   <TextInput
-                    style={styles.input}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.surfaceSecondary,
+                        borderColor: theme.borderDefault,
+                        color: theme.textPrimary,
+                      },
+                    ]}
                     value={plateNumber}
-                    onChangeText={setPlateNumber}
-                    placeholder="12345"
+                    onChangeText={(val) => setPlateNumber(val.replace(/\D/g, ''))}
+                    placeholder="e.g. 12345"
+                    placeholderTextColor={theme.textTertiary}
                     keyboardType="numeric"
-                    maxLength={6}
+                    maxLength={5}
                     returnKeyType="done"
                   />
                 </View>
               </View>
 
-              {/* Display Name */}
-              <Text style={styles.inputLabel}>Vehicle Name (Optional)</Text>
+              {/* Quick-Select Code Pills for this Emirate */}
+              <View style={styles.quickCodeContainer}>
+                <Text style={[styles.quickCodeLabel, { color: theme.textTertiary }]}>
+                  {currentConfig.description}:
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickCodeRow}>
+                  {currentConfig.allowedCodes.slice(0, 10).map((code) => {
+                    const isCodeSelected = plateCode.toUpperCase() === code;
+                    return (
+                      <TouchableOpacity
+                        key={code}
+                        onPress={() => setPlateCode(code)}
+                        style={[
+                          styles.quickCodePill,
+                          {
+                            backgroundColor: isCodeSelected ? theme.mintPastel : theme.surfaceSecondary,
+                            borderColor: isCodeSelected ? theme.mintPrimary : theme.borderDefault,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.quickCodePillText,
+                            {
+                              color: isCodeSelected ? theme.mintPrimary : theme.textSecondary,
+                              fontWeight: isCodeSelected ? '800' : '600',
+                            },
+                          ]}
+                        >
+                          {code}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* 3. Display Name */}
+              <Text style={[styles.inputLabel, { color: theme.textPrimary, marginTop: 12 }]}>
+                Vehicle Nickname (Optional)
+              </Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.surfaceSecondary,
+                    borderColor: theme.borderDefault,
+                    color: theme.textPrimary,
+                  },
+                ]}
                 value={displayName}
                 onChangeText={setDisplayName}
-                placeholder="e.g. My Lexus / Daily Driver"
+                placeholder="e.g. My White Lexus / Daily Car"
+                placeholderTextColor={theme.textTertiary}
                 returnKeyType="done"
               />
 
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+              {/* Save Button */}
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.mintPrimary }]}
+                onPress={handleSave}
+                activeOpacity={0.8}
+              >
                 <Text style={styles.saveButtonText}>Save Vehicle</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -260,236 +430,260 @@ export default function VehiclesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
   },
   headerTextGroup: {
     flex: 1,
-    marginRight: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#0F172A',
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,
-    color: '#64748B',
     marginTop: 2,
+    lineHeight: 18,
   },
   addButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowRadius: 5,
     elevation: 4,
+    marginLeft: 12,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
     marginBottom: 12,
+    position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
     elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  plateContainer: {
-    width: 90,
-    height: 55,
-    borderWidth: 2,
-    borderColor: '#0F172A',
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
-  },
-  plateHeader: {
-    backgroundColor: '#0F172A',
-    paddingVertical: 2,
-    alignItems: 'center',
-  },
-  plateEmirateText: {
-    color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  plateBody: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 4,
-  },
-  plateCodeText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  plateNumberText: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#0F172A',
-    letterSpacing: 1,
+  plateWrapper: {
+    marginRight: 14,
   },
   vehicleInfo: {
     flex: 1,
-    marginLeft: 14,
+    justifyContent: 'center',
   },
   vehicleTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
+    letterSpacing: -0.2,
   },
   vehicleSubtitle: {
     fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
+    marginTop: 3,
   },
   defaultBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 8,
+    gap: 4,
   },
   defaultBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#16A34A',
-    marginLeft: 4,
+    fontSize: 11,
+    fontWeight: '700',
   },
   makeDefaultButton: {
-    marginTop: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
   },
   makeDefaultText: {
-    fontSize: 12,
-    color: '#2563EB',
+    fontSize: 11,
     fontWeight: '600',
   },
   deleteButton: {
     position: 'absolute',
-    top: 14,
-    right: 14,
-    padding: 6,
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 32,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  // ─── Modal Styles ───
   modalOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
   },
   backdropDismiss: {
     flex: 1,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingTop: 8,
-    maxHeight: '85%',
+    maxHeight: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   dragHandle: {
-    width: 36,
+    width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#CBD5E1',
     alignSelf: 'center',
+    marginTop: 4,
     marginBottom: 12,
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#0F172A',
+    letterSpacing: -0.3,
   },
   modalCloseButton: {
-    padding: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
     borderRadius: 16,
-    backgroundColor: '#F1F5F9',
+    marginBottom: 16,
+  },
+  previewLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 10,
   },
   inputLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#475569',
     marginBottom: 6,
-    marginTop: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
-  emirateRow: {
+  emirateScrollRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
+    paddingBottom: 14,
   },
   emirateChip: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-  },
-  emirateChipActive: {
-    backgroundColor: '#2563EB',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   emirateChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  emirateChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    fontSize: 13,
   },
   plateInputRow: {
     flexDirection: 'row',
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#0F172A',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  quickCodeContainer: {
+    marginBottom: 6,
+  },
+  quickCodeLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  quickCodeRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  quickCodePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  quickCodePillText: {
+    fontSize: 12,
   },
   saveButton: {
-    backgroundColor: '#2563EB',
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 22,
-    marginBottom: 8,
+    justifyContent: 'center',
+    marginTop: 20,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
   },
   saveButtonText: {
     color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '700',
-    fontSize: 16,
   },
 });

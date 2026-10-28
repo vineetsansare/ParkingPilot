@@ -5,6 +5,29 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NotificationService } from '../services/notificationService';
 import { ParkingDetectionService } from '../services/parkingDetectionService';
 
+import { ThemeProvider, useAppTheme } from '../theme/ThemeContext';
+
+function RootNavigation() {
+  const { isDark } = useAppTheme();
+
+  return (
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="alert"
+          options={{
+            presentation: 'modal',
+            headerShown: true,
+            title: 'Parking Zone Alert',
+          }}
+        />
+      </Stack>
+    </>
+  );
+}
+
 export default function RootLayout() {
   useEffect(() => {
     // Initialize notifications and background parking observer
@@ -22,18 +45,10 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="alert"
-          options={{
-            presentation: 'modal',
-            headerShown: true,
-            title: 'Parking Zone Alert',
-          }}
-        />
-      </Stack>
+      <ThemeProvider>
+        <RootNavigation />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
+

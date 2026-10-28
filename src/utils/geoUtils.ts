@@ -72,3 +72,15 @@ export function getDistanceInMeters(coord1: LatLng, coord2: LatLng): number {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+/**
+ * Calculates geometric centroid of a polygon
+ */
+export function calculatePolygonCentroid(polygon: LatLng[]): LatLng {
+  if (polygon.length === 0) return { latitude: 25.2048, longitude: 55.2708 };
+  const bbox = calculateBoundingBox(polygon);
+  return {
+    latitude: (bbox.minLat + bbox.maxLat) / 2,
+    longitude: (bbox.minLng + bbox.maxLng) / 2,
+  };
+}
