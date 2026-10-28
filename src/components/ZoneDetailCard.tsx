@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Alert,
+  ScrollView,
 } from 'react-native';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { ParkingZone } from '../types/parking';
 import { calculateParkingTariff } from '../utils/tariffCalculator';
 import { getParkingStatusDescription } from '../utils/timeUtils';
 import { MessagingService } from '../services/messagingService';
 import { useParkingStore } from '../store/parkingStore';
 import { useVehicleStore } from '../store/vehicleStore';
-import { Ionicons } from '@expo/vector-icons';
-import { findNearbyZones } from '../services/zoneLookupService';
+import { useAppTheme } from '../theme/ThemeContext';
+import { LicensePlateView } from './LicensePlateView';
 
 interface Props {
   zone: ParkingZone;
@@ -29,7 +31,8 @@ export const ZoneDetailCard: React.FC<Props> = ({
   onToggleExpand,
   onClose,
 }) => {
-  const [durationHours, setDurationHours] = useState<number>(1);
+  const { theme, isDark, shadow3D, personaColor, driverPersona } = useAppTheme();
+  const [durationHours, setDurationHours] = useState<number>(2);
   const [isSending, setIsSending] = useState(false);
 
   const defaultVehicle = useVehicleStore((state) => state.defaultVehicle);
@@ -38,18 +41,29 @@ export const ZoneDetailCard: React.FC<Props> = ({
   const tariff = calculateParkingTariff(zone, durationHours);
   const status = getParkingStatusDescription(zone.emirateId);
 
-  // Available duration options
-  const durationOptions = [1, 2, 3, 4].filter((h) => h <= zone.maxStayHours);
+  // Available duration options (1 to 4 hours, capped by maxStayHours)
+  const durationOptions = [1, 2, 3, 4].filter((h) => h <= (zone.maxStayHours || 4));
 
-  // Nearby zones for boundary assistance
-  const centerCoord = zone.polygonCoords[0] || { latitude: 25.242, longitude: 55.303 };
-  const nearbyZones = findNearbyZones(centerCoord, 400).filter((z) => z.id !== zone.id);
+  // Dynamic expiry time calculation based on selected duration
+  const expiryTimeFormatted = useMemo(() => {
+    const now = new Date();
+    now.setHours(now.getHours() + durationHours);
+    let hours = now.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
+    return `Valid until ${hours}:${minutes} ${ampm}`;
+  }, [durationHours]);
 
   const handlePay = async (channel: 'whatsapp' | 'sms') => {
     if (!defaultVehicle) {
       Alert.alert(
         'Vehicle Required',
-        'Please add your vehicle plate number in the My Car tab before submitting a parking ticket.'
+        'Please configure your vehicle plate number in the My Car tab before submitting a parking ticket.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add Car', onPress: () => router.push('/vehicles') },
+        ]
       );
       return;
     }
@@ -79,6 +93,14 @@ export const ZoneDetailCard: React.FC<Props> = ({
           amountPaid: tariff.totalCostAED,
           isActive: true,
         });
+
+        Alert.alert(
+          'Parking Dispatched',
+          `Your parking request for Zone ${zone.zoneCode} (${durationHours}h) has been dispatched via ${
+            channel === 'whatsapp' ? 'official WhatsApp' : 'SMS'
+          }. View your active countdown in the History tab.`,
+          [{ text: 'OK', onPress: () => onToggleExpand() }]
+        );
       } else if (result.error) {
         Alert.alert('Payment Error', result.error);
       }
@@ -93,23 +115,38 @@ export const ZoneDetailCard: React.FC<Props> = ({
   if (!isExpanded) {
     return (
       <TouchableOpacity
-        style={styles.miniDockContainer}
+        style={[
+          styles.miniDockContainer,
+          shadow3D,
+          {
+            backgroundColor: theme.surfacePrimary,
+            borderColor: isDark ? theme.borderDefault : 'rgba(255, 255, 255, 0.9)',
+            borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#FFFFFF',
+          },
+        ]}
         onPress={onToggleExpand}
         activeOpacity={0.92}
       >
         <View style={styles.miniDockLeft}>
-          <View style={styles.miniZoneBadge}>
+          <View
+            style={[
+              styles.miniZoneBadge,
+              { backgroundColor: theme.primaryContainer || theme.mintPrimary },
+            ]}
+          >
             <Text style={styles.miniZoneText}>{zone.zoneCode}</Text>
           </View>
           <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.miniAreaName} numberOfLines={1}>
+            <Text
+              style={[styles.miniAreaName, { color: theme.textPrimary }]}
+              numberOfLines={1}
+            >
               {zone.areaNameEn}
             </Text>
-            <Text style={styles.miniTariffText}>
+            <Text style={[styles.miniTariffText, { color: theme.textTertiary }]}>
               {tariff.isFree
                 ? 'FREE PARKING'
-                : `AED ${tariff.hourlyRateAED.toFixed(2)} / hr`} •{' '}
-              {zone.emirateId === 'DXB' ? 'On-street' : zone.emirateId}
+                : `AED ${tariff.hourlyRateAED.toFixed(2)}/hr`} • {zone.emirateId}
             </Text>
           </View>
         </View>
@@ -117,7 +154,10 @@ export const ZoneDetailCard: React.FC<Props> = ({
         <View style={styles.miniDockRight}>
           {/* Quick Pay CTA */}
           <TouchableOpacity
-            style={styles.miniWhatsAppButton}
+            style={[
+              styles.miniWhatsAppButton,
+              { backgroundColor: theme.mintPrimary },
+            ]}
             onPress={(e) => {
               e.stopPropagation();
               handlePay(zone.emirateId === 'DXB' ? 'whatsapp' : 'sms');
@@ -125,20 +165,26 @@ export const ZoneDetailCard: React.FC<Props> = ({
           >
             <Ionicons
               name={zone.emirateId === 'DXB' ? 'logo-whatsapp' : 'paper-plane'}
-              size={15}
+              size={14}
               color="#FFFFFF"
             />
             <Text style={styles.miniWhatsAppText}>Pay</Text>
           </TouchableOpacity>
 
-          {/* Quick Expand Chevron */}
-          <TouchableOpacity style={styles.expandButton} onPress={onToggleExpand}>
-            <Ionicons name="chevron-up" size={18} color="#0D9488" />
+          {/* Expand Chevron */}
+          <TouchableOpacity
+            style={[styles.expandButton, { backgroundColor: theme.surfaceSecondary }]}
+            onPress={onToggleExpand}
+          >
+            <Ionicons name="chevron-up" size={17} color={theme.mintPrimary} />
           </TouchableOpacity>
 
           {/* Dismiss button */}
-          <TouchableOpacity style={styles.miniCloseButton} onPress={onClose}>
-            <Ionicons name="close" size={18} color="#94A3B8" />
+          <TouchableOpacity
+            style={[styles.miniCloseButton, { backgroundColor: theme.surfaceSecondary }]}
+            onPress={onClose}
+          >
+            <Ionicons name="close" size={16} color={theme.textTertiary} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -146,218 +192,326 @@ export const ZoneDetailCard: React.FC<Props> = ({
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 2. EXPANDED FULL MODAL DRAWER (Parkin App Production Style)
+  // 2. EXPANDED FULL DRAWER (Stitch Oasis Precision Specification)
   // ─────────────────────────────────────────────────────────────
   return (
-    <View style={styles.expandedContainer}>
-      {/* Drag handle / collapse bar */}
-      <TouchableOpacity style={styles.dragHandleContainer} onPress={onToggleExpand}>
-        <View style={styles.dragHandle} />
+    <View
+      style={[
+        styles.expandedContainer,
+        shadow3D,
+        {
+          backgroundColor: theme.surfacePrimary,
+          borderColor: isDark ? theme.borderDefault : 'rgba(255, 255, 255, 0.9)',
+          borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#FFFFFF',
+        },
+      ]}
+    >
+      {/* Centered Pull Bar Handle */}
+      <TouchableOpacity
+        style={styles.dragHandleContainer}
+        onPress={onToggleExpand}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.dragHandle, { backgroundColor: theme.borderDefault }]} />
       </TouchableOpacity>
 
-      {/* Header with Zone Badge, Name, and Close */}
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <View style={styles.parkinZoneBadge}>
-            <Text style={styles.parkinZoneBadgeText}>{zone.zoneCode}</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+        {/* 1. Zone Identification Header Card */}
+        <View
+          style={[
+            styles.zoneHeaderCard,
+            { backgroundColor: theme.surfaceSecondary, borderColor: theme.borderSubtle },
+          ]}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.zoneCodeBadgeRow}>
+              <Text
+                style={[
+                  styles.zoneCodeText,
+                  { color: theme.mintPrimary, fontVariant: ['tabular-nums'] },
+                ]}
+              >
+                {zone.zoneCode}
+              </Text>
+              <View
+                style={[
+                  styles.categoryPill,
+                  { backgroundColor: theme.mintPrimary },
+                ]}
+              >
+                <Text style={styles.categoryPillText}>
+                  {zone.isPremium ? 'PREMIUM' : 'STANDARD'}
+                </Text>
+              </View>
+            </View>
+            <Text
+              style={[styles.areaNameText, { color: theme.textPrimary }]}
+              numberOfLines={1}
+            >
+              {zone.areaNameEn}
+            </Text>
+            <View style={styles.authorityRow}>
+              <Ionicons name="shield-checkmark" size={13} color={theme.mintPrimary} />
+              <Text style={[styles.authorityText, { color: theme.textSecondary }]}>
+                {zone.emirateId === 'DXB'
+                  ? 'Dubai Parkin / RTA Official Zone'
+                  : `${zone.emirateId} Official Municipal Zone`}
+              </Text>
+            </View>
           </View>
-          <View style={{ marginLeft: 12 }}>
-            <Text style={styles.areaName}>{zone.areaNameEn}</Text>
-            <Text style={styles.emirateLabel}>
-              {zone.emirateId === 'DXB' ? 'Dubai (RTA / Parkin)' : zone.emirateId}
+
+          <View style={styles.hourlyRateBlock}>
+            <Text style={[styles.rateAmountText, { color: theme.textPrimary }]}>
+              AED {tariff.hourlyRateAED.toFixed(2)}
+            </Text>
+            <Text style={[styles.perHourText, { color: theme.textTertiary }]}>PER HOUR</Text>
+          </View>
+        </View>
+
+        {/* 2. Active Tariff Rules Alert Pill */}
+        <View
+          style={[
+            styles.tariffRulesPill,
+            { backgroundColor: theme.surfaceSecondary, borderColor: theme.borderSubtle },
+          ]}
+        >
+          <View style={styles.tariffRulesLeft}>
+            <Ionicons name="time-outline" size={16} color={theme.skyPrimary} />
+            <Text style={[styles.tariffRulesText, { color: theme.textSecondary }]}>
+              {status.isPaid ? 'Peak: 8:00 AM – 10:00 PM (Mon–Sat)' : 'Free Right Now'}
             </Text>
           </View>
-        </View>
-
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          <TouchableOpacity onPress={onToggleExpand} style={styles.iconCircleButton}>
-            <Ionicons name="chevron-down" size={18} color="#475569" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={styles.iconCircleButton}>
-            <Ionicons name="close" size={18} color="#64748B" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Status & Rate summary (Parkin style) */}
-      <View style={styles.infoMetaRow}>
-        <View style={styles.infoMetaItem}>
-          <Ionicons name="location-sharp" size={16} color="#0D9488" />
-          <Text style={styles.infoMetaText}>
-            On street • {tariff.isPeak ? 'Peak' : 'Off-peak'}{' '}
-            <Text style={{ fontWeight: '800' }}>
-              AED {tariff.hourlyRateAED.toFixed(2)}/hr
-            </Text>
-          </Text>
-        </View>
-
-        <View style={styles.infoMetaItem}>
-          <Ionicons name="time-outline" size={16} color="#64748B" />
-          <Text style={styles.infoMetaText}>
-            {status.isPaid ? '08:00 – 22:00 (Paid)' : 'Free Right Now'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Duration selector */}
-      <Text style={styles.sectionTitle}>Select Parking Duration</Text>
-      <View style={styles.durationRow}>
-        {durationOptions.map((hours) => (
-          <TouchableOpacity
-            key={hours}
-            onPress={() => setDurationHours(hours)}
+          <View
             style={[
-              styles.durationChip,
-              durationHours === hours && styles.durationChipActive,
+              styles.freeSunBadge,
+              { backgroundColor: theme.mintPastel, borderColor: theme.mintBorder },
             ]}
           >
-            <Text
-              style={[
-                styles.durationChipText,
-                durationHours === hours && styles.durationChipTextActive,
-              ]}
-            >
-              {hours} hr{hours > 1 ? 's' : ''}
+            <Text style={[styles.freeSunText, { color: theme.mintPrimary }]}>
+              {zone.freeOnSunday ? 'FREE SUN' : 'PAID SUN'}
             </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Peak and Off-peak Hours Visual Timeline (Parkin App Pattern) */}
-      <View style={styles.timelineCard}>
-        <Text style={styles.timelineTitle}>Peak and Off-peak hours</Text>
-        <View style={styles.timelineBar}>
-          {/* 12am - 8am: Off-peak / Free (Cyan) */}
-          <View style={[styles.timelineSegment, { flex: 8, backgroundColor: '#99F6E4' }]} />
-          {/* 8am - 10am: Peak (Peach/Coral) */}
-          <View style={[styles.timelineSegment, { flex: 2, backgroundColor: '#FCA5A5' }]} />
-          {/* 10am - 4pm: Off-peak (Cyan) */}
-          <View style={[styles.timelineSegment, { flex: 6, backgroundColor: '#99F6E4' }]} />
-          {/* 4pm - 8pm: Peak (Peach/Coral) */}
-          <View style={[styles.timelineSegment, { flex: 4, backgroundColor: '#FCA5A5' }]} />
-          {/* 8pm - 12am: Off-peak (Cyan) */}
-          <View style={[styles.timelineSegment, { flex: 4, backgroundColor: '#99F6E4' }]} />
-        </View>
-
-        <View style={styles.timelineLabels}>
-          <Text style={styles.timelineTimeText}>12 am</Text>
-          <Text style={styles.timelineTimeText}>8 am</Text>
-          <Text style={styles.timelineTimeText}>10 am</Text>
-          <Text style={styles.timelineTimeText}>4 pm</Text>
-          <Text style={styles.timelineTimeText}>8 pm</Text>
-          <Text style={styles.timelineTimeText}>11:59 pm</Text>
-        </View>
-
-        <View style={styles.timelineLegend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#2DD4BF' }]} />
-            <Text style={styles.legendText}>Off-peak hours</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#F87171' }]} />
-            <Text style={styles.legendText}>Peak hours</Text>
           </View>
         </View>
-      </View>
 
-      {/* Tariff summary */}
-      <View style={styles.tariffCard}>
-        <View style={styles.tariffRow}>
-          <View>
-            <Text style={styles.tariffLabel}>Total Ticket Price</Text>
-            <Text style={styles.vatSubtext}>Inclusive of 5% UAE VAT</Text>
+        {/* 3. Selected Vehicle Module */}
+        <View style={styles.vehicleSectionWrapper}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionLabel, { color: theme.textTertiary }]}>
+              SELECTED VEHICLE
+            </Text>
+            <TouchableOpacity onPress={() => router.push('/vehicles')}>
+              <Text style={[styles.manageCarsLink, { color: theme.mintPrimary }]}>
+                Manage Cars
+              </Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.tariffValue}>
-            {tariff.isFree ? 'FREE' : `AED ${tariff.totalCostAED.toFixed(2)}`}
-          </Text>
+
+          {defaultVehicle ? (
+            <TouchableOpacity
+              style={[
+                styles.vehicleCardBox,
+                { backgroundColor: theme.surfaceSecondary, borderColor: theme.borderSubtle },
+              ]}
+              onPress={() => router.push('/vehicles')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.vehicleCardLeft}>
+                {/* UAE Dual-Cell Capsule Miniature */}
+                <View style={styles.capsuleWrapper}>
+                  <View style={styles.capsuleEmirateCell}>
+                    <Text style={styles.capsuleEmirateText}>
+                      {defaultVehicle.emirateCode}
+                    </Text>
+                    <Text style={styles.capsuleCodeText}>
+                      {defaultVehicle.plateCode}
+                    </Text>
+                  </View>
+                  <View style={styles.capsuleNumberCell}>
+                    <Text
+                      style={[
+                        styles.capsuleNumberText,
+                        { fontVariant: ['tabular-nums'] },
+                      ]}
+                    >
+                      {defaultVehicle.plateNumber}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.vehicleTextCol}>
+                  <Text style={[styles.vehicleName, { color: theme.textPrimary }]} numberOfLines={1}>
+                    {defaultVehicle.displayName}
+                  </Text>
+                  <Text style={[styles.vehicleSub, { color: theme.textTertiary }]}>
+                    Default Vehicle • Private
+                  </Text>
+                </View>
+              </View>
+
+              <Ionicons name="chevron-forward" size={17} color={theme.textTertiary} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.noVehiclePrompt,
+                { backgroundColor: theme.sandPastel, borderColor: theme.sandBorder },
+              ]}
+              onPress={() => router.push('/vehicles')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="car-outline" size={20} color={theme.sandPrimary} />
+              <Text style={[styles.noVehicleText, { color: theme.sandPrimary }]}>
+                + Add your vehicle plate to pay in 1 tap
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <View style={styles.fineProtectionRow}>
-          <Ionicons name="shield-checkmark" size={14} color="#16A34A" />
-          <Text style={styles.fineProtectionText}>
-            Protects against AED 150 non-payment fine (10m grace period)
-          </Text>
-        </View>
-      </View>
+        {/* 4. Quick Duration Stepper Pills */}
+        <View style={styles.durationSectionWrapper}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionLabel, { color: theme.textTertiary }]}>
+              PARKING DURATION
+            </Text>
+            <Text style={[styles.expiryText, { color: theme.mintPrimary }]}>
+              {expiryTimeFormatted}
+            </Text>
+          </View>
 
-      {/* Payment Action Buttons */}
-      <View style={styles.actionButtons}>
-        {/* WhatsApp Button (Primary - Saves 0.30 fee) */}
-        {zone.emirateId === 'DXB' && (
+          <View style={styles.durationGrid}>
+            {durationOptions.map((h) => {
+              const isSelected = durationHours === h;
+              const costForH = (tariff.hourlyRateAED * h).toFixed(0);
+
+              return (
+                <TouchableOpacity
+                  key={h}
+                  style={[
+                    styles.durationPillBtn,
+                    {
+                      backgroundColor: isSelected
+                        ? (driverPersona === 'pink' ? theme.pinkPrimary : theme.mintPrimary)
+                        : theme.surfaceSecondary,
+                      borderColor: isSelected ? 'transparent' : theme.borderSubtle,
+                    },
+                    isSelected && shadow3D,
+                  ]}
+                  onPress={() => setDurationHours(h)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.durationPillHours,
+                      { color: isSelected ? '#FFFFFF' : theme.textPrimary },
+                    ]}
+                  >
+                    {h}h
+                  </Text>
+                  <Text
+                    style={[
+                      styles.durationPillCost,
+                      {
+                        color: isSelected
+                          ? (driverPersona === 'pink' ? theme.pinkPastel : theme.primaryFixed)
+                          : theme.textTertiary,
+                      },
+                    ]}
+                  >
+                    AED {costForH}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* 5. Estimated Cost Line Item with Radical Transparency */}
+        <View
+          style={[
+            styles.costTransparencyRow,
+            { backgroundColor: theme.surfaceSecondary, borderColor: theme.borderSubtle },
+          ]}
+        >
+          <View style={styles.costTransparencyLeft}>
+            <Ionicons name="information-circle-outline" size={16} color={theme.skyPrimary} />
+            <Text style={[styles.costTransparencyText, { color: theme.textSecondary }]}>
+              Includes 5% UAE VAT
+            </Text>
+          </View>
+          <View style={styles.costTransparencyRight}>
+            <Text style={[styles.totalLabel, { color: theme.textTertiary }]}>Estimated Total:</Text>
+            <Text style={[styles.totalAmount, { color: theme.textPrimary }]}>
+              AED {tariff.totalCostAED.toFixed(2)}
+            </Text>
+          </View>
+        </View>
+
+        {/* 6. Dual Payment Actions (WhatsApp & SMS) */}
+        <View style={styles.paymentActionsGroup}>
+          {/* Primary Action: Official WhatsApp Bot (AED 0 Fee) */}
           <TouchableOpacity
-            style={[styles.payButton, styles.whatsappButton]}
+            style={[
+              styles.primaryPayButton,
+              shadow3D,
+              { backgroundColor: theme.mintPrimary },
+            ]}
             onPress={() => handlePay('whatsapp')}
             disabled={isSending}
+            activeOpacity={0.8}
           >
-            <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
-            <View style={{ marginLeft: 8 }}>
-              <Text style={styles.payButtonText}>Pay via WhatsApp</Text>
-              <Text style={styles.whatsappFeeSaveText}>Free • Saves AED 0.30 fee</Text>
+            <View style={styles.payButtonLeft}>
+              <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryPayButtonText}>
+                Pay via WhatsApp (Official RTA Bot)
+              </Text>
             </View>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
           </TouchableOpacity>
-        )}
 
-        {/* SMS Button */}
-        <TouchableOpacity
-          style={[styles.payButton, styles.smsButton]}
-          onPress={() => handlePay('sms')}
-          disabled={isSending}
-        >
-          <Ionicons name="chatbox-ellipses-outline" size={20} color="#0F172A" />
-          <Text style={[styles.payButtonText, { color: '#0F172A', marginLeft: 8 }]}>
-            Pay via SMS ({zone.emirateId === 'DXB' ? '7275' : 'Send SMS'})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* UAE Regulatory & Independent Disclaimer */}
-      <View style={styles.legalComplianceNotice}>
-        <Ionicons name="information-circle-outline" size={13} color="#94A3B8" />
-        <Text style={styles.legalComplianceNoticeText}>
-          Independent utility tool. Payments are dispatched directly to official transport authorities (RTA 7275 / WhatsApp).
-        </Text>
-      </View>
-
-      {/* Nearby Zone Alternatives (helps with boundary mistakes) */}
-      {nearbyZones.length > 0 && (
-        <View style={styles.nearbyContainer}>
-          <Text style={styles.nearbyLabel}>Near the boundary? Also close to:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {nearbyZones.map((alt) => (
-              <TouchableOpacity
-                key={alt.id}
-                style={styles.altZoneBadge}
-                onPress={() => useParkingStore.getState().setSelectedZone(alt)}
-              >
-                <Text style={styles.altZoneText}>Zone {alt.zoneCode}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {/* Secondary Action: Standard SMS Gateway (e.g. 7275) */}
+          <TouchableOpacity
+            style={[
+              styles.secondaryPayButton,
+              { backgroundColor: theme.surfaceSecondary, borderColor: theme.borderDefault },
+            ]}
+            onPress={() => handlePay('sms')}
+            disabled={isSending}
+            activeOpacity={0.7}
+          >
+            <View style={styles.payButtonLeft}>
+              <Ionicons name="chatbox-ellipses" size={18} color={theme.skyPrimary} style={{ marginRight: 8 }} />
+              <Text style={[styles.secondaryPayButtonText, { color: theme.textPrimary }]}>
+                Send SMS to {zone.emirateId === 'AUH' ? '3009' : zone.emirateId === 'SHJ' ? '5566' : '7275'}
+              </Text>
+            </View>
+            <Text style={[styles.smsPayloadPreview, { color: theme.textTertiary }]}>
+              {defaultVehicle
+                ? `${zone.zoneCode} ${defaultVehicle.plateNumber} ${durationHours}`
+                : `${zone.zoneCode} ${durationHours}`}
+            </Text>
+          </TouchableOpacity>
         </View>
-      )}
+
+        {/* 7. Official Safeguard Disclaimer */}
+        <Text style={[styles.safeguardDisclaimer, { color: theme.textTertiary }]}>
+          Opens official municipal channel. Parking is activated only upon receipt of official SMS confirmation.
+        </Text>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  // ─── Collapsed Mini Dock ───
+  // ─── Mini Dock Styles ───
   miniDockContainer: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 12,
-    marginBottom: 6,
-    borderRadius: 16,
+    borderRadius: 18,
+    borderWidth: 1.5,
     paddingVertical: 10,
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    marginHorizontal: 12,
   },
   miniDockLeft: {
     flexDirection: 'row',
@@ -366,25 +520,23 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   miniZoneBadge: {
-    backgroundColor: '#00C49F', // Parkin signature cyan-green
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   miniZoneText: {
-    color: '#0F172A',
-    fontWeight: '900',
+    color: '#FFFFFF',
+    fontWeight: '800',
     fontSize: 13,
   },
   miniAreaName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
   },
   miniTariffText: {
     fontSize: 11,
-    color: '#64748B',
     marginTop: 1,
+    fontWeight: '500',
   },
   miniDockRight: {
     flexDirection: 'row',
@@ -392,7 +544,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   miniWhatsAppButton: {
-    backgroundColor: '#00C49F',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -401,292 +552,328 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   miniWhatsAppText: {
-    color: '#0F172A',
-    fontWeight: '800',
-    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
   },
   expandButton: {
-    backgroundColor: '#F0FDFA',
-    padding: 6,
-    borderRadius: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   miniCloseButton: {
-    padding: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  // ─── Expanded Modal ───
+  // ─── Expanded Drawer Styles ───
   expandedContainer: {
-    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 12,
+    maxHeight: 520,
   },
   dragHandleContainer: {
     alignItems: 'center',
     paddingVertical: 8,
   },
   dragHandle: {
-    width: 36,
+    width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#CBD5E1',
   },
-  header: {
+  zoneHeaderCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  titleContainer: {
+  zoneCodeBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  parkinZoneBadge: {
-    backgroundColor: '#00C49F', // Parkin cyan
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  parkinZoneBadgeText: {
-    color: '#0F172A',
+  zoneCodeText: {
+    fontSize: 26,
     fontWeight: '900',
-    fontSize: 16,
-  },
-  areaName: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  emirateLabel: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  iconCircleButton: {
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-  },
-  infoMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    marginBottom: 12,
-  },
-  infoMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  infoMetaText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '600',
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
-    marginBottom: 8,
-    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  durationRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
+  categoryPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-  durationChip: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-  },
-  durationChipActive: {
-    backgroundColor: '#F0FDFA',
-    borderColor: '#0D9488',
-  },
-  durationChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  durationChipTextActive: {
-    color: '#0D9488',
+  categoryPillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '800',
+    letterSpacing: 0.5,
   },
-
-  // ─── Timeline Bar ───
-  timelineCard: {
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  timelineTitle: {
-    fontSize: 13,
+  areaNameText: {
+    fontSize: 15,
     fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 8,
-  },
-  timelineBar: {
-    flexDirection: 'row',
-    height: 14,
-    borderRadius: 7,
-    overflow: 'hidden',
-    marginBottom: 6,
-  },
-  timelineSegment: {
-    height: '100%',
-  },
-  timelineLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  timelineTimeText: {
-    fontSize: 9,
-    color: '#94A3B8',
-    fontWeight: '600',
-  },
-  timelineLegend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
     marginTop: 2,
   },
-  legendItem: {
+  authorityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginTop: 3,
   },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  legendText: {
+  authorityText: {
     fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-
-  tariffCard: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  tariffRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  tariffLabel: {
-    fontSize: 14,
-    color: '#475569',
-  },
-  vatSubtext: {
-    fontSize: 10,
-    color: '#64748B',
-    marginTop: 2,
     fontWeight: '500',
   },
-  tariffValue: {
+  hourlyRateBlock: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+    paddingLeft: 8,
+  },
+  rateAmountText: {
     fontSize: 20,
-    fontWeight: '900',
-    color: '#0F172A',
+    fontWeight: '800',
   },
-  fineProtectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  fineProtectionText: {
-    fontSize: 11,
-    color: '#16A34A',
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  actionButtons: {
-    gap: 10,
-  },
-  payButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-  },
-  whatsappButton: {
-    backgroundColor: '#25D366',
-  },
-  smsButton: {
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  payButtonText: {
-    color: '#FFFFFF',
+  perHourText: {
+    fontSize: 10,
     fontWeight: '700',
-    fontSize: 15,
+    letterSpacing: 0.5,
   },
-  whatsappFeeSaveText: {
-    color: '#E0F2FE',
-    fontSize: 11,
-    fontWeight: '500',
+  tariffRulesPill: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  legalComplianceNotice: {
+  tariffRulesLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 10,
-    paddingHorizontal: 4,
   },
-  legalComplianceNoticeText: {
-    fontSize: 10,
-    color: '#94A3B8',
-    flex: 1,
-    lineHeight: 14,
-  },
-  nearbyContainer: {
-    marginTop: 12,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  nearbyLabel: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginBottom: 6,
-  },
-  altZoneBadge: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  altZoneText: {
+  tariffRulesText: {
     fontSize: 12,
-    color: '#475569',
+    fontWeight: '500',
+  },
+  freeSunBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  freeSunText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  vehicleSectionWrapper: {
+    marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  manageCarsLink: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  vehicleCardBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  vehicleCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  capsuleWrapper: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    height: 32,
+    marginRight: 10,
+  },
+  capsuleEmirateCell: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 3,
+  },
+  capsuleEmirateText: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  capsuleCodeText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  capsuleNumberCell: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  capsuleNumberText: {
+    color: '#0F172A',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  vehicleTextCol: {
+    flex: 1,
+  },
+  vehicleName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  vehicleSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  noVehiclePrompt: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  noVehicleText: {
+    fontSize: 13,
     fontWeight: '600',
+  },
+  durationSectionWrapper: {
+    marginBottom: 12,
+  },
+  expiryText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  durationGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  durationPillBtn: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durationPillHours: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  durationPillCost: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  costTransparencyRow: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  costTransparencyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  costTransparencyText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  costTransparencyRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  totalLabel: {
+    fontSize: 11,
+  },
+  totalAmount: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  paymentActionsGroup: {
+    gap: 8,
+    marginBottom: 10,
+  },
+  primaryPayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  payButtonLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  primaryPayButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  secondaryPayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  secondaryPayButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  smsPayloadPreview: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  safeguardDisclaimer: {
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 15,
+    paddingHorizontal: 10,
   },
 });

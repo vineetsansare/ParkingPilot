@@ -44,6 +44,7 @@ export default function MapScreen() {
 
   const [isCardExpanded, setIsCardExpanded] = useState<boolean>(false);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [mapType, setMapType] = useState<'standard' | 'hybrid'>('standard');
   const [mapCenter, setMapCenter] = useState<LatLng>({
     latitude: INITIAL_REGION.latitude,
     longitude: INITIAL_REGION.longitude,
@@ -176,6 +177,7 @@ export default function MapScreen() {
         ref={mapRef}
         style={styles.map}
         initialRegion={INITIAL_REGION}
+        mapType={mapType}
         onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
         showsUserLocation={false}
@@ -351,6 +353,57 @@ export default function MapScreen() {
         </View>
       </View>
 
+      {/* Floating Tactical Map Controls on TOP-RIGHT (Stitch Spec) */}
+      <View style={[styles.floatingToolStack, { top: insets.top + 72 }]}>
+        <TouchableOpacity
+          style={[styles.floatingToolBtn, shadow3D, { backgroundColor: theme.surfacePrimary }]}
+          onPress={() => mapRef.current?.animateCamera({ heading: 0, pitch: 0 })}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="compass-outline" size={22} color={theme.rosePrimary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.floatingToolBtn, shadow3D, { backgroundColor: theme.surfacePrimary }]}
+          onPress={() => setMapType((prev) => (prev === 'standard' ? 'hybrid' : 'standard'))}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={mapType === 'hybrid' ? 'map' : 'layers-outline'}
+            size={20}
+            color={theme.mintPrimary}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* Stitch Detection & Verification Safeguard Banner */}
+      {zoneAtReticle && !isCardExpanded && (
+        <View
+          style={[
+            styles.detectionBannerWrapper,
+            shadow3D,
+            { bottom: selectedZone ? 82 : 24 },
+          ]}
+        >
+          <View style={styles.detectionBannerInner}>
+            <View style={styles.detectionBannerLeft}>
+              <Ionicons name="location" size={18} color="#85F8C4" style={{ marginRight: 6 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.detectionBannerTitle} numberOfLines={1}>
+                  Detected: {zoneAtReticle.zoneCode} ({zoneAtReticle.areaNameEn})
+                </Text>
+                <Text style={styles.detectionBannerSubtitle}>
+                  Please verify zone on orange street sign
+                </Text>
+              </View>
+            </View>
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark-circle" size={12} color="#002114" style={{ marginRight: 3 }} />
+              <Text style={styles.verifiedBadgeText}>Verified</Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Bottom Zone Details Card (Sits just above the bottom tab bar) */}
       {selectedZone && (
@@ -672,5 +725,69 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
+  },
+
+  // ─── Stitch Tactical Controls & Safeguard Banner ───
+  floatingToolStack: {
+    position: 'absolute',
+    right: 14,
+    gap: 8,
+    zIndex: 15,
+  },
+  floatingToolBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  detectionBannerWrapper: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 25,
+  },
+  detectionBannerInner: {
+    backgroundColor: '#131B2E',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  detectionBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  detectionBannerTitle: {
+    color: '#F8FAFC',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  detectionBannerSubtitle: {
+    color: '#94A3B8',
+    fontSize: 10,
+    marginTop: 1,
+  },
+  verifiedBadge: {
+    backgroundColor: '#85F8C4',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verifiedBadgeText: {
+    color: '#002114',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
 });

@@ -50,6 +50,20 @@ export interface ThemeColorTokens {
   pinkBorder: string;
   pinkSurface: string;
 
+  // Stitch Oasis Precision Tokens
+  primary: string;
+  secondary: string;
+  tertiary: string;
+  surfaceContainerLow: string;
+  surfaceContainer: string;
+  surfaceContainerHigh: string;
+  surfaceContainerHighest: string;
+  inverseSurface: string;
+  inverseOnSurface: string;
+  primaryContainer: string;
+  primaryFixed: string;
+  onPrimaryFixed: string;
+
   // Interactive controls
   switchTrackOff: string;
   switchTrackOn: string;
@@ -99,6 +113,19 @@ export const lightColors: ThemeColorTokens = {
   pinkBorder: "#FBCFE8",
   pinkSurface: "#FFF1F6",
 
+  primary: "#006948",
+  secondary: "#006398",
+  tertiary: "#BA0035",
+  surfaceContainerLow: "#F2F3FF",
+  surfaceContainer: "#EAEDFF",
+  surfaceContainerHigh: "#E2E7FF",
+  surfaceContainerHighest: "#DAE2FD",
+  inverseSurface: "#131B2E",
+  inverseOnSurface: "#EEF0FF",
+  primaryContainer: "#00855D",
+  primaryFixed: "#85F8C4",
+  onPrimaryFixed: "#002114",
+
   switchTrackOff: "#CBD5E1",
   switchTrackOn: "#A7F3D0",
   switchThumb: "#059669",
@@ -146,6 +173,19 @@ export const darkColors: ThemeColorTokens = {
   pinkPastel: "rgba(244, 114, 182, 0.15)",
   pinkBorder: "rgba(244, 114, 182, 0.30)",
   pinkSurface: "#280A1A",
+
+  primary: "#68DBA9",
+  secondary: "#93CCFF",
+  tertiary: "#FFB3B6",
+  surfaceContainerLow: "#151C2C",
+  surfaceContainer: "#1C2438",
+  surfaceContainerHigh: "#242E44",
+  surfaceContainerHighest: "#2C3852",
+  inverseSurface: "#F8FAFC",
+  inverseOnSurface: "#090D16",
+  primaryContainer: "#006948",
+  primaryFixed: "#2DD4BF",
+  onPrimaryFixed: "#002114",
 
   switchTrackOff: "#273248",
   switchTrackOn: "rgba(45, 212, 191, 0.35)",
